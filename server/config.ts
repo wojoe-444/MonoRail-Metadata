@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -7,6 +8,28 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 function env(name: string, fallback = ''): string {
   const v = process.env[name]
   return v === undefined || v === '' ? fallback : v
+}
+
+/**
+ * The per-user folder the app keeps local data in. The worker works out the same path
+ * (`app_data_dir()` in worker/src/monorail_worker/config.py), so both find the same bucket folder.
+ * - Windows: %LOCALAPPDATA%\MonoRail-Metadata
+ * - macOS: ~/Library/Application Support/MonoRail-Metadata
+ * - Linux: $XDG_DATA_HOME/monorail-metadata (default ~/.local/share/monorail-metadata)
+ */
+export function appDataDir(): string {
+  const home = os.homedir()
+  if (process.platform === 'win32') return path.join(env('LOCALAPPDATA', path.join(home, 'AppData', 'Local')), 'MonoRail-Metadata')
+  if (process.platform === 'darwin') return path.join(home, 'Library', 'Application Support', 'MonoRail-Metadata')
+  return path.join(env('XDG_DATA_HOME', path.join(home, '.local', 'share')), 'monorail-metadata')
+}
+
+/** TEAM_BUCKET: a gs:// URL as is, a folder resolved from the repo root (like the worker), or empty for the app data folder. */
+function teamBucket(): string {
+  const v = env('TEAM_BUCKET')
+  if (!v) return path.join(appDataDir(), 'team-bucket')
+  if (v.startsWith('gs://')) return v
+  return path.resolve(root, v.replace(/^file:\/\//, ''))
 }
 
 /**
@@ -40,8 +63,8 @@ export const CONFIG = {
   malloyDir: path.resolve(root, env('MALLOY_DIR', 'malloy')),
 
   // ---- Team backend (docs/team-backend.md) ----
-  /** The shared bucket: gs://bucket/prefix, or a local folder (default .team-bucket/ at the repo root). */
-  teamBucket: env('TEAM_BUCKET', path.join(root, '.team-bucket')),
+  /** The shared bucket: gs://bucket/prefix, or a local folder (default: team-bucket in the app data folder, see appDataDir). */
+  teamBucket: teamBucket(),
   /** How requests prove who sent them: "local" (a name, for one-machine development) or "google" (an ID token). */
   teamAuth: env('TEAM_AUTH', 'local') as 'local' | 'google',
   /** Who you are when TEAM_AUTH=local: an OpenMetadata user name or email. */

@@ -21,7 +21,11 @@ npm run team:echo      # one echo request through the bucket, prints the round t
 npm run worker:test    # pytest, with the vertex extra (the OpenMetadata integration test is skipped if it isn't reachable)
 ```
 
-By default the bucket is the `.team-bucket/` folder at the repo root. The app reads the same folder when it runs with `APP_BACKEND=team`. Other commands:
+By default the bucket is `team-bucket` in the per-user app data folder: `%LOCALAPPDATA%\MonoRail-Metadata\team-bucket` on Windows (`~/Library/Application Support/MonoRail-Metadata/team-bucket` on macOS, `~/.local/share/monorail-metadata/team-bucket` on Linux). The app reads the same folder when it runs with `APP_BACKEND=team`.
+
+During the pilot this is how the worker runs: on each tester's own machine, not as a Vertex AI job. `npm run pilot` (at the repo root) starts it together with the app. Easier ways for a team to share the app without a central server are coming.
+
+Other commands:
 
 ```sh
 uv run --project worker monorail-worker resync      # ask the worker to rebuild the snapshot now
@@ -36,7 +40,7 @@ Read from the environment, then the repo-root `.env` (the environment wins).
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `TEAM_BUCKET` | `<repo>/.team-bucket` | The bucket: `gs://bucket/prefix`, or a local folder (relative paths are from the repo root). |
+| `TEAM_BUCKET` | `<app data>/team-bucket` | The bucket: `gs://bucket/prefix`, or a local folder (relative paths are from the repo root). The default is above. |
 | `OM_URL` | (required) | OpenMetadata, e.g. `http://localhost:8585`. On Windows, `localhost` is dialed as `127.0.0.1` (Docker doesn't answer on `::1`). |
 | `OM_TOKEN` | | A bot JWT. Preferred. |
 | `OM_EMAIL`, `OM_PASSWORD` | | Basic-auth login instead of a token (`POST /api/v1/auth/login`, password base64-encoded), renewed on 401. |

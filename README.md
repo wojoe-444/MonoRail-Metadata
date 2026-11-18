@@ -28,12 +28,24 @@ For a team with Google sign-in, a GCS bucket, a BigQuery dataset and one long-ru
 - Each **app** (`APP_BACKEND=team`) loads the snapshot, follows the feed, answers reads from memory (entities, search, lineage, and each table's latest profile), and sends changes to the worker. Browsing keeps working when the worker is down; changes queue. A request the worker would refuse is refused by the app at once, from the same allowlist.
 - Every change records who made it: the worker maps the signed-in person to their OpenMetadata user (`byUser` in the feed and the audit table). With `TEAM_IMPERSONATE=true` and a bot created with `allowImpersonation`, OpenMetadata itself applies that person's permissions and shows them as `updatedBy`.
 
-For now everything can run on one machine, with a local folder as the bucket:
+### Pilot
+
+While test users pilot the app, each tester runs the whole team backend on their own machine. The bucket is a folder in their app data, and the worker (framed as the Vertex AI job in the Google Cloud setup) runs locally next to a local OpenMetadata:
+
+1. Start OpenMetadata ([deploy/openmetadata](deploy/openmetadata/README.md)): `cd deploy/openmetadata && docker compose up -d`.
+2. Copy `.env.example` to `.env` and set `OM_URL=http://localhost:8585` and `OM_TOKEN` (or `OM_EMAIL`/`OM_PASSWORD`). Optionally `npm run seed:om` for the sample catalog.
+3. Install [uv](https://docs.astral.sh/uv/) for the worker, then:
 
 ```sh
-npm run worker                                 # the worker, next to a local OpenMetadata (deploy/openmetadata)
-APP_BACKEND=team npm run dev                   # the app, reading from the bucket folder (.team-bucket/)
+npm install
+npm run pilot      # the UI, the app server with APP_BACKEND=team, and the worker, together
 ```
+
+The bucket folder is `%LOCALAPPDATA%\MonoRail-Metadata\team-bucket` on Windows (`~/Library/Application Support/MonoRail-Metadata/team-bucket` on macOS, `~/.local/share/monorail-metadata/team-bucket` on Linux). Set `TEAM_BUCKET` to use another folder. The app and the worker work out the same default, and the server prints the path it uses on start. Deleting the folder loses nothing that matters: OpenMetadata holds the catalog, and the worker rebuilds the snapshot on its next start.
+
+**Coming:** easier ways for a team to share the app without a central server. For now, a pilot installation is one person's.
+
+The two halves can also run separately: `npm run worker`, and the app with `APP_BACKEND=team` in `.env` and `npm run dev`.
 
 `TEAM_BUCKET=gs://bucket/prefix` and `TEAM_AUTH=google` switch to Google Cloud Storage and Google sign-in. On Vertex AI, `TEAM_VERTEX_SUCCESSOR=true` has the worker start its own successor job before the job's maximum runtime ([worker/README.md](worker/README.md#vertex-ai-successor-jobs)).
 
@@ -101,6 +113,7 @@ Malloy is the semantic layer: a source is a semantic model, a measure is a metri
 | `npm run build` | Typecheck, then build the UI to `dist/`. |
 | `npm start` | The server, which also serves `dist/`. One process for production. |
 | `npm run seed:om` | Load the demo catalog into the OpenMetadata at `OM_URL` (for a local or test server). |
+| `npm run pilot` | The pilot setup: UI, app server (`APP_BACKEND=team`) and worker on one machine, sharing the bucket folder in app data. |
 | `npm run worker` / `npm run worker:test` | The team-backend worker, and its tests (pytest, with the `vertex` extra). |
 | `npm run ui:add -- <name>` | Add a shadcn/ui component wired to the theme. |
 
