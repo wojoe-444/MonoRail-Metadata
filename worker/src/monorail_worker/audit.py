@@ -16,8 +16,8 @@ log = logging.getLogger(__name__)
 TABLE = "metadata_events"
 
 INSERT_SQL = (
-    "INSERT INTO `{table}` (seq, ts, `by`, request_id, source, entity_type, entity_id, op, entity)\n"
-    "SELECT r.seq, TIMESTAMP_MILLIS(r.ts), r.`by`, r.request_id, r.source, r.entity_type, r.entity_id, r.op,\n"
+    "INSERT INTO `{table}` (seq, ts, `by`, by_user_id, by_user_name, request_id, source, entity_type, entity_id, op, entity)\n"
+    "SELECT r.seq, TIMESTAMP_MILLIS(r.ts), r.`by`, r.by_user_id, r.by_user_name, r.request_id, r.source, r.entity_type, r.entity_id, r.op,\n"
     "  SAFE.PARSE_JSON(r.entity)\n"
     "FROM UNNEST(@rows) AS r"
 )
@@ -52,11 +52,14 @@ def rows_for(event: dict[str, Any]) -> list[dict[str, Any]]:
             etype, eid, entity = "tableProfile", rec.get("id"), rec
         elif op == "profile.delete":
             etype, eid = "tableProfile", c.get("tableId")
+        user = event.get("byUser") or {}
         rows.append(
             {
                 "seq": int(event["seq"]),
                 "ts": int(event["ts"]),
                 "by": event.get("by"),
+                "by_user_id": user.get("id"),
+                "by_user_name": user.get("name"),
                 "request_id": event.get("requestId"),
                 "source": event.get("source"),
                 "entity_type": etype,
@@ -88,6 +91,8 @@ class BigQueryAudit:
             bq.SchemaField("seq", "INT64", mode="REQUIRED"),
             bq.SchemaField("ts", "TIMESTAMP", mode="REQUIRED"),
             bq.SchemaField("by", "STRING"),
+            bq.SchemaField("by_user_id", "STRING"),
+            bq.SchemaField("by_user_name", "STRING"),
             bq.SchemaField("request_id", "STRING"),
             bq.SchemaField("source", "STRING"),
             bq.SchemaField("entity_type", "STRING"),
@@ -99,6 +104,14 @@ class BigQueryAudit:
         table.time_partitioning = bq.TimePartitioning(type_=bq.TimePartitioningType.DAY, field="ts")
         table.clustering_fields = ["entity_type", "entity_id"]
         self.client.create_table(table, exists_ok=True)
+        # A table made by an older worker lacks the newer columns: add them (adding NULLABLE columns is allowed).
+        current = self.client.get_table(self.table_id)
+        have = {f.name for f in current.schema}
+        missing = [f for f in schema if f.name not in have]
+        if missing:
+            current.schema = list(current.schema) + missing
+            self.client.update_table(current, ["schema"])
+            log.info("added %s to %s", ", ".join(f.name for f in missing), self.table_id)
         self._ensured = True
 
     def record(self, event: dict[str, Any]) -> None:
@@ -110,6 +123,8 @@ class BigQueryAudit:
                 bq.ScalarQueryParameter("seq", "INT64", r["seq"]),
                 bq.ScalarQueryParameter("ts", "INT64", r["ts"]),
                 bq.ScalarQueryParameter("by", "STRING", r["by"]),
+                bq.ScalarQueryParameter("by_user_id", "STRING", r["by_user_id"]),
+                bq.ScalarQueryParameter("by_user_name", "STRING", r["by_user_name"]),
                 bq.ScalarQueryParameter("request_id", "STRING", r["request_id"]),
                 bq.ScalarQueryParameter("source", "STRING", r["source"]),
                 bq.ScalarQueryParameter("entity_type", "STRING", r["entity_type"]),

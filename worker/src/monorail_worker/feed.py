@@ -53,13 +53,14 @@ class Feed:
         source: P.Source,
         request_id: str | None = None,
         seq: int | None = None,
+        by_user: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Write the next event and move the head. Returns the event.
 
         `seq` reserves a specific number (used by resync, which writes the snapshot first)."""
         nxt = seq if seq is not None else self.seq + 1
         while True:
-            ev = P.feed_event(nxt, self.clock(), by=by, request_id=request_id, source=source, changes=changes)
+            ev = P.feed_event(nxt, self.clock(), by=by, by_user=by_user, request_id=request_id, source=source, changes=changes)
             if self.storage.create(P.feed_key(nxt), dumps(ev)):
                 break
             existing = read_json(self.storage, P.feed_key(nxt)) or {}

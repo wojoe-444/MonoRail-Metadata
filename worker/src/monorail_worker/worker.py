@@ -42,12 +42,14 @@ from .state import ReplicaState
 from .storage import Storage, dumps, read_json, write_json
 from .touched import FieldsPolicy, NeedResync, materialize, resolve
 from .ulid import floor_ulid, is_ulid, now_ms, ulid_time
+from .users import Directory
 
 log = logging.getLogger(__name__)
 
 IDEMPOTENT = {"GET", "PUT", "DELETE"}
-
 HOUSEKEEPING_MS = 3_600_000
+OM_VERSION_RETRY_MS = 60_000
+IMPERSONATE_HEADER = "X-Impersonate-User"
 
 
 class Worker:
@@ -74,6 +76,8 @@ class Worker:
         self.state = ReplicaState()
         self.fields = FieldsPolicy()
         self.self_writes = SelfWrites()
+        self.users = Directory()
+        self._om_version_at = 0
         self.cursor: dict[str, Any] = {}
         self.events: EventCursor | None = None
         self.om_version = ""
@@ -116,11 +120,9 @@ class Worker:
         self.cursor = read_json(self.storage, P.CURSOR) or {}
         self.feed.recover()
         self.events = EventCursor.from_json(self.cursor.get("omEvents"), self.clock() - 60_000)
-        try:
-            ver = self.om.request("GET", "/system/version")
-            self.om_version = (ver.body or {}).get("version", "") if isinstance(ver.body, dict) else ""
-        except Exception:
-            log.exception("couldn't read OpenMetadata's version")
+        self.refresh_om_version(force=True)
+        if self.settings.impersonate:
+            self._check_impersonation()
         try:
             self._startup_snapshot()
             self._snapshot_ok = True
@@ -134,11 +136,49 @@ class Worker:
         self._next_events = now + int(self.settings.om_events_seconds * 1000)
         self._next_snapshot = now + int(self.settings.snapshot_minutes * 60_000)
 
+    def refresh_om_version(self, *, force: bool = False) -> str:
+        """Read OpenMetadata's version for the heartbeat; while it's unknown, retry at most once a minute."""
+        now = self.clock()
+        if self.om_version or (not force and now - self._om_version_at < OM_VERSION_RETRY_MS):
+            return self.om_version
+        self._om_version_at = now
+        try:
+            ver = self.om.request("GET", "/system/version")
+            if ver.status < 400 and isinstance(ver.body, dict):
+                self.om_version = str(ver.body.get("version") or "")
+            else:
+                log.warning("OpenMetadata answered %s to GET /system/version", ver.status)
+        except Exception as e:
+            log.warning("couldn't read OpenMetadata's version: %s", e)
+        return self.om_version
+
+    def _check_impersonation(self) -> None:
+        """TEAM_IMPERSONATE needs a bot token whose bot has allowImpersonation. Say so early if not:
+        OpenMetadata would refuse every impersonated request."""
+        try:
+            me = self.om.request("GET", "/users/loggedInUser")
+            body = me.body if isinstance(me.body, dict) else {}
+        except Exception as e:
+            log.warning("TEAM_IMPERSONATE: couldn't check the worker's OpenMetadata account: %s", e)
+            return
+        if not body.get("isBot"):
+            log.error(
+                "TEAM_IMPERSONATE=true, but the worker signs in to OpenMetadata as %s, which is not a bot. "
+                "OpenMetadata accepts X-Impersonate-User only from a bot, so requests from mapped users will be refused. "
+                "Set OM_TOKEN to the JWT of a bot created with allowImpersonation.",
+                body.get("name"),
+            )
+        elif body.get("allowImpersonation") is False:
+            log.error("TEAM_IMPERSONATE=true, but bot %s does not have allowImpersonation; impersonated requests will be refused.", body.get("name"))
+        else:
+            log.info("impersonation on: om requests reach OpenMetadata as the requesting user, through bot %s", body.get("name"))
+
     def _replay_feed_into_state(self, from_seq: int) -> None:
         for s in range(from_seq + 1, self.feed.seq + 1):
             ev = read_json(self.storage, P.feed_key(s))
             if ev:
                 self.state.apply(ev.get("changes") or [])
+                self.users.apply(ev.get("changes") or [])
 
     def _startup_snapshot(self) -> None:
         prev = snapshot.load(self.storage)
@@ -152,6 +192,7 @@ class Worker:
                 self.resync(by=None, request_id=None)
                 return
             self.state.load(ex.by_type(), ex.edges, ex.profiles)
+            self.users.load(ex.entities.get("users", []))
             self._replay_feed_into_state(int(man.get("seq", 0)))
         self._snapshot(publish_diff=prev is not None, force=True)
 
@@ -160,6 +201,7 @@ class Worker:
         ex = snapshot.export(self.om, self.fields)
         if ex.om_version:
             self.om_version = ex.om_version
+        self.users.load(ex.entities.get("users", []))
         changed = False
         if publish_diff:
             changes = snapshot.diff(self.state, ex)
@@ -176,22 +218,36 @@ class Worker:
         log.info("snapshot written at seq %s (%s)", man["seq"], ", ".join(f"{f['entityType']}={f['count']}" for f in man["files"]["entities"]))
         return man
 
-    def resync(self, *, by: str | None, request_id: str | None, source: P.Source = "resync") -> int:
+    def resync(
+        self, *, by: str | None, request_id: str | None, source: P.Source = "resync", by_user: dict[str, Any] | None = None
+    ) -> int:
         """Rebuild the snapshot and announce it: the manifest gets the event's seq, written first."""
         seq = self.feed.seq + 1
         ex = snapshot.export(self.om, self.fields)
+        if ex.om_version:
+            self.om_version = ex.om_version
         snapshot.carry_profiles(self.state, ex)
         snapshot.write(self.storage, ex, seq, self.clock())
-        ev = self.feed.append([P.RESYNC], by=by, source=source, request_id=request_id, seq=seq)
+        ev = self.feed.append([P.RESYNC], by=by, by_user=by_user, source=source, request_id=request_id, seq=seq)
         self.state.load(ex.by_type(), ex.edges, ex.profiles)
+        self.users.load(ex.entities.get("users", []))
         self.snapshot_seq = ev["seq"]
         self._audit(ev)
         return int(ev["seq"])
 
     # ---------- feed ----------
-    def _publish(self, changes: list[dict[str, Any]], *, by: str | None, source: P.Source, request_id: str | None = None) -> dict[str, Any]:
-        ev = self.feed.append(changes, by=by, source=source, request_id=request_id)
+    def _publish(
+        self,
+        changes: list[dict[str, Any]],
+        *,
+        by: str | None,
+        source: P.Source,
+        request_id: str | None = None,
+        by_user: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        ev = self.feed.append(changes, by=by, by_user=by_user, source=source, request_id=request_id)
         self.state.apply(changes)
+        self.users.apply(changes)
         for c in changes:
             if c["op"] == "upsert":
                 self.self_writes.add(c["entity"]["id"], c["entity"].get("version"))
@@ -284,29 +340,36 @@ class Worker:
             by = self.identity.verify(req.auth)
         except AuthError as e:
             return self._reply(rid, status=401 if e.code == "unauthenticated" else 403, error=(e.code, str(e)))  # type: ignore[arg-type]
+        by_user = self.users.find(by, self.om)
 
         ttl_ms = int(self.settings.request_ttl_minutes * 60_000)
         if inflight is None and self.clock() - req.ts > ttl_ms:
             return self._reply(
-                rid, status=410, by=by, error=("expired", f"The request waited more than {self.settings.request_ttl_minutes:g} minutes and was not applied.")
+                rid,
+                status=410,
+                by=by,
+                by_user=by_user,
+                error=("expired", f"The request waited more than {self.settings.request_ttl_minutes:g} minutes and was not applied."),
             )
 
         if req.op == "echo":
-            return self._reply(rid, status=200, body=req.body, by=by)
+            return self._reply(rid, status=200, body=req.body, by=by, by_user=by_user)
         if req.op == "resync":
-            seq = self.resync(by=by, request_id=rid)
-            return self._reply(rid, status=200, body={"seq": seq}, by=by, feed_seq=seq)
+            seq = self.resync(by=by, by_user=by_user, request_id=rid)
+            return self._reply(rid, status=200, body={"seq": seq}, by=by, by_user=by_user, feed_seq=seq)
 
         ok, why = allowlist.check(req.method, req.path)
         if not ok:
-            return self._reply(rid, status=403, by=by, error=("forbidden", why))
-        return self._om(rid, req, by, inflight)
+            return self._reply(rid, status=403, by=by, by_user=by_user, error=("forbidden", why))
+        return self._om(rid, req, by, by_user, inflight)
 
-    def _om(self, rid: str, req: P.Request, by: str, inflight: dict[str, Any] | None) -> dict[str, Any]:
+    def _om(self, rid: str, req: P.Request, by: str, by_user: dict[str, Any] | None, inflight: dict[str, Any] | None) -> dict[str, Any]:
         method = req.method or "GET"
         path = allowlist.normalize(req.path or "") or ""
         query = req.query or {}
         headers = {k: v for k, v in (req.headers or {}).items() if k.lower() in allowlist.PASS_HEADERS}
+        if self.settings.impersonate and by_user:
+            headers[IMPERSONATE_HEADER] = by_user["name"]
         body = req.body
         has_body = method in ("PUT", "POST", "PATCH") or (method == "DELETE" and body is not None)
         stage = (inflight or {}).get("stage")
@@ -328,7 +391,7 @@ class Worker:
         if method != "GET" and res.status < 400 and stage not in ("fed", "audited"):
             ev = self.feed.find_request(rid) if stage == "called" else None
             if ev is None:
-                ev = self._apply_effects(rid, by, method, path, query, body, res)
+                ev = self._apply_effects(rid, by, by_user, method, path, query, body, res)
             if ev is not None:
                 feed_seq = int(ev["seq"])
                 self._set_inflight({"id": rid, "stage": "fed", "status": res.status, "body": res.body, "feedSeq": feed_seq})
@@ -341,13 +404,14 @@ class Worker:
                 rid,
                 status=500,
                 by=by,
+                by_user=by_user,
                 feed_seq=feed_seq,
                 error=("internal", "The worker restarted while applying this change, so it may or may not have been applied. Check before retrying."),
             )
-        return self._reply(rid, status=res.status, body=sanitize.scrub(res.body), by=by, feed_seq=feed_seq)
+        return self._reply(rid, status=res.status, body=sanitize.scrub(res.body), by=by, by_user=by_user, feed_seq=feed_seq)
 
     def _apply_effects(
-        self, rid: str, by: str, method: str, path: str, query: dict[str, Any], body: Any, res: OmResponse
+        self, rid: str, by: str, by_user: dict[str, Any] | None, method: str, path: str, query: dict[str, Any], body: Any, res: OmResponse
     ) -> dict[str, Any] | None:
         """Re-read what the write touched and append the feed event. None if nothing changed for the replica."""
         targets = resolve(method, path, query, body, res.status, res.body)
@@ -361,11 +425,11 @@ class Worker:
             log.warning("re-reading after %s %s failed (%s); falling back to a resync", method, path, e)
             changes = None
         if changes is None:
-            seq = self.resync(by=by, request_id=rid, source="request")
+            seq = self.resync(by=by, by_user=by_user, request_id=rid, source="request")
             return read_json(self.storage, P.feed_key(seq))
         if not changes:
             return None
-        return self._publish(changes, by=by, source="request", request_id=rid)
+        return self._publish(changes, by=by, by_user=by_user, source="request", request_id=rid)
 
     # ---------- OpenMetadata change events ----------
     def poll_om_events(self) -> int:
@@ -382,7 +446,8 @@ class Worker:
             except NeedResync:
                 changes = []
             if changes:
-                ev = self._publish(changes, by=by_of(events), source="om-events")
+                by = by_of(events)
+                ev = self._publish(changes, by=by, by_user=self.users.find(by, self.om), source="om-events")
                 self._audit(ev)
                 n = len(changes)
         self._save_cursor()
@@ -390,6 +455,7 @@ class Worker:
 
     # ---------- loop ----------
     def run_once(self) -> None:
+        self.refresh_om_version()
         if not self.lease.held:
             if self.leading:
                 log.warning("%s lost the lease", self.worker_id)
@@ -429,6 +495,7 @@ class Worker:
 
     def run_forever(self, stop: threading.Event | None = None) -> None:
         stop = stop or threading.Event()
+        self.refresh_om_version(force=True)  # so the first heartbeat already has it
         live = Liveness(self.storage, self.lease, self.info, self.clock)
         live.start()
         log.info("worker %s on bucket %s, OpenMetadata %s", self.worker_id, self.storage.label, getattr(self.om, "url", ""))

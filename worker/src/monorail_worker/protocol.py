@@ -84,6 +84,7 @@ def reply(
     status: int,
     body: Any = None,
     by: str | None = None,
+    by_user: dict[str, Any] | None = None,
     feed_seq: int | None = None,
     error: tuple[ErrorCode, str] | None = None,
 ) -> dict[str, Any]:
@@ -96,6 +97,7 @@ def reply(
         "body": body,
         "error": {"code": error[0], "message": error[1]} if error else None,
         "by": by,
+        "byUser": by_user,
         "feedSeq": feed_seq,
     }
 
@@ -132,10 +134,22 @@ def profile_delete(table_id: str) -> dict[str, Any]:
 RESYNC = {"op": "resync"}
 
 
+def user_ref(user: dict[str, Any] | None) -> dict[str, Any] | None:
+    """`byUser`: the OpenMetadata user `by` maps to."""
+    return {"id": user["id"], "name": user["name"]} if user else None
+
+
 def feed_event(
-    seq: int, ts: int, *, by: str | None, request_id: str | None, source: Source, changes: list[dict[str, Any]]
+    seq: int,
+    ts: int,
+    *,
+    by: str | None,
+    request_id: str | None,
+    source: Source,
+    changes: list[dict[str, Any]],
+    by_user: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {"seq": seq, "ts": ts, "by": by, "requestId": request_id, "source": source, "changes": changes}
+    return {"seq": seq, "ts": ts, "by": by, "byUser": by_user, "requestId": request_id, "source": source, "changes": changes}
 
 
 def head(seq: int, ts: int) -> dict[str, Any]:

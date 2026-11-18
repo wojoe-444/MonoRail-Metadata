@@ -56,7 +56,7 @@ def test_echo_needs_no_method():
 
 def test_reply_shape():
     r = P.reply("ID", 5, status=200, body={"a": 1}, by="ada", feed_seq=124)
-    assert r == {"v": 1, "id": "ID", "ts": 5, "ok": True, "status": 200, "body": {"a": 1}, "error": None, "by": "ada", "feedSeq": 124}
+    assert r == {"v": 1, "id": "ID", "ts": 5, "ok": True, "status": 200, "body": {"a": 1}, "error": None, "by": "ada", "byUser": None, "feedSeq": 124}
     e = P.reply("ID", 5, status=403, error=("forbidden", "no"))
     assert e["ok"] is False and e["error"] == {"code": "forbidden", "message": "no"} and e["feedSeq"] is None
 

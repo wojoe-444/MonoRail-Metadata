@@ -59,7 +59,7 @@ export async function teamFetch(path: string, init: RequestInit = {}): Promise<R
   if (method === 'GET') {
     if (url.pathname === '/users/loggedInUser') return json(200, loggedInUser())
     if (url.pathname === '/system/version')
-      return json(200, { version: replica.omVersion ?? replica.heartbeat?.omVersion ?? 'unknown', revision: 'team' })
+      return json(200, { version: replica.omVersion || replica.heartbeat?.omVersion || 'unknown', revision: 'team' })
     if (replica.loadedAt && servedLocally(url.pathname)) {
       // Lists default to 10 per page on the real server too; the demo handler emulates paging and filters.
       return demoApp.request(`/api/v1${url.pathname}${url.search}`, { method: 'GET' })

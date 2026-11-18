@@ -116,6 +116,9 @@ class OmClient:
         if not path.startswith("/"):
             path = "/" + path
         hdrs: dict[str, str] = {"Accept": "application/json"}
+        for k, v in (headers or {}).items():
+            if k.lower() == "x-impersonate-user" and v:
+                hdrs["X-Impersonate-User"] = v  # OpenMetadata 2.0.8 bot impersonation (TEAM_IMPERSONATE)
         content: bytes | None = None
         if body is not NO_BODY:
             ctype = (headers or {}).get("Content-Type") or (headers or {}).get("content-type") or "application/json"

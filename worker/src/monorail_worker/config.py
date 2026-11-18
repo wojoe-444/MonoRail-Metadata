@@ -12,6 +12,10 @@ from dotenv import dotenv_values
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
+def _bool(v: str) -> bool:
+    return v.strip().lower() in ("1", "true", "yes", "on")
+
+
 def _split(v: str) -> list[str]:
     return [x.strip().lower() for x in v.replace(";", ",").split(",") if x.strip()]
 
@@ -39,6 +43,8 @@ class Settings:
     retention_days: float = 7
     worker_id: str = ""
     team_user: str = "admin"  # identity the `echo`/`resync` CLI sends with TEAM_AUTH=local
+    # Send om requests as the person (OpenMetadata's X-Impersonate-User); needs a bot token with allowImpersonation.
+    impersonate: bool = False
 
     @staticmethod
     def load(env: dict[str, str] | None = None, dotenv_path: Path | None = None) -> "Settings":
@@ -75,4 +81,5 @@ class Settings:
             poll_seconds=float(get("TEAM_POLL_SECONDS", "1")),
             worker_id=get("TEAM_WORKER_ID"),
             team_user=get("TEAM_USER", "admin"),
+            impersonate=_bool(get("TEAM_IMPERSONATE", "false")),
         )
