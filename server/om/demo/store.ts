@@ -53,6 +53,33 @@ class Store {
     return c
   }
 
+  /** Empty everything (before loading a fresh replica snapshot). */
+  reset(): void {
+    this.collections.clear()
+    this.byId.clear()
+    this.history.clear()
+    this.lineage.clear()
+    this.tableProfiles.clear()
+    this.columnProfiles.clear()
+    this.sampleData.clear()
+    this.testResults.clear()
+    this.pipelineRuns.clear()
+    this.threads.length = 0
+  }
+
+  /**
+   * Put an entity in as-is (a replica of a real server's entity): no defaults filled, href kept.
+   * Replaces an existing entity with the same id.
+   */
+  put(path: string, entity: Entity): void {
+    const c = this.collections.get(path)
+    if (!c) throw new Error(`Unknown collection ${path}`)
+    const old = this.byId.get(entity.id)
+    if (old && old.collection !== c) old.collection.items.delete(entity.id)
+    c.items.set(entity.id, entity)
+    this.byId.set(entity.id, { entity, collection: c })
+  }
+
   collectionFor(entityType: string): Collection | undefined {
     for (const c of this.collections.values()) if (c.entityType === entityType) return c
     return undefined

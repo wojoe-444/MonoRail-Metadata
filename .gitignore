@@ -4,3 +4,9 @@ dist/
 .env
 .env.*
 !.env.example
+
+# Team backend: the local bucket and the worker's Python environment
+.team-bucket/
+worker/.venv/
+__pycache__/
+.pytest_cache/

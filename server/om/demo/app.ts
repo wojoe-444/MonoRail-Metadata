@@ -20,7 +20,13 @@ import { ref, store, type Entity } from './store'
  */
 export const demoApp = new Hono().basePath('/api/v1')
 
-seedAll()
+let seeded = false
+/** Fill the store with the demo fixtures, once. Demo mode only: in team mode the store holds a replica instead. */
+export function ensureDemoSeeded() {
+  if (seeded) return
+  seeded = true
+  seedAll()
+}
 
 const DEMO_USER = 'admin'
 

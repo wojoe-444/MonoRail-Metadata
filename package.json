@@ -13,7 +13,10 @@
     "seed:om": "tsx scripts/seed-openmetadata.ts",
     "dev:web": "vite",
     "dev:api": "node --watch --import tsx server/index.ts",
-    "start": "tsx server/index.ts"
+    "start": "tsx server/index.ts",
+    "worker": "uv run --project worker monorail-worker",
+    "worker:test": "uv run --project worker pytest worker/tests",
+    "team:echo": "uv run --project worker monorail-worker echo"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",

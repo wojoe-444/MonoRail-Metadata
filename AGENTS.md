@@ -15,6 +15,7 @@ browser ──▶ server/ (Hono, :8787) ──/api/om/*────▶ OpenMetad
 - **Code against the real OpenMetadata 2.0.8 API**, not the demo. The demo copies the real shapes; when a page needs an endpoint the demo lacks, add it to the demo. The reference is OpenMetadata's own UI REST client: `gh api "repos/open-metadata/OpenMetadata/contents/openmetadata-ui/src/main/resources/ui/src/rest/<file>.ts?ref=2.0.8-release" -H "Accept: application/vnd.github.raw"` (e.g. `tableAPI.ts`, `testAPI.ts`, `glossaryAPI.ts`, `ingestionPipelineAPI.ts`).
 - **Malloy** (`server/malloy/`): models are `.malloy` files in `malloy/`. `CatalogBigQueryConnection` reads table schemas from OpenMetadata first, so models compile without BigQuery credentials; running a query needs them.
 - **OpenMetadata itself** runs from `deploy/openmetadata/` (Docker Compose). We don't fork it; changes go in this repo.
+- **Three backends** (`APP_BACKEND`, `server/config.ts`): `demo` (the in-process demo catalog), `direct` (this server calls OpenMetadata at `OM_URL`), and `team` (`server/team/`): reads come from an in-memory replica of the catalog, loaded from a shared bucket and kept current from its change feed, and writes go to a Python worker (`worker/`) as request files. `docs/team-backend.md` is the contract between the app and the worker; change it before changing either side. Pages don't know which backend is in use, so keep all OpenMetadata access going through `omFetch` / `/api/om`.
 
 ## Web conventions
 

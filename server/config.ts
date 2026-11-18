@@ -38,9 +38,36 @@ export const CONFIG = {
 
   /** Folder of .malloy models. */
   malloyDir: path.resolve(root, env('MALLOY_DIR', 'malloy')),
+
+  // ---- Team backend (docs/team-backend.md) ----
+  /** The shared bucket: gs://bucket/prefix, or a local folder (default .team-bucket/ at the repo root). */
+  teamBucket: env('TEAM_BUCKET', path.join(root, '.team-bucket')),
+  /** How requests prove who sent them: "local" (a name, for one-machine development) or "google" (an ID token). */
+  teamAuth: env('TEAM_AUTH', 'local') as 'local' | 'google',
+  /** Who you are when TEAM_AUTH=local: an OpenMetadata user name or email. */
+  teamUser: env('TEAM_USER', 'admin'),
+  /** Google OAuth client (Desktop app type) for TEAM_AUTH=google. */
+  googleClientId: env('GOOGLE_OAUTH_CLIENT_ID'),
+  googleClientSecret: env('GOOGLE_OAUTH_CLIENT_SECRET'),
+  /** How often to check the change feed, in ms. */
+  teamFeedPollMs: Number(env('TEAM_FEED_POLL_MS', '3000')),
 }
 
-export const DEMO_MODE = !CONFIG.omUrl
+/**
+ * Where OpenMetadata calls go:
+ * - demo: the in-process demo catalog (no OpenMetadata needed)
+ * - direct: this server calls OpenMetadata at OM_URL
+ * - team: reads from a replica of the catalog, writes through the shared worker (docs/team-backend.md)
+ * Set APP_BACKEND explicitly, or leave it empty: OM_URL set means direct, otherwise demo.
+ */
+export const BACKEND = ((): 'demo' | 'direct' | 'team' => {
+  const b = env('APP_BACKEND').toLowerCase()
+  if (b === 'demo' || b === 'direct' || b === 'team') return b
+  if (b) throw new Error(`APP_BACKEND must be demo, direct or team (got "${b}")`)
+  return CONFIG.omUrl ? 'direct' : 'demo'
+})()
+
+export const DEMO_MODE = BACKEND === 'demo'
 
 export function bigQueryConfigured(): boolean {
   return Boolean(CONFIG.bqProjectId || process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.GOOGLE_CLOUD_PROJECT)

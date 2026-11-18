@@ -20,6 +20,22 @@ Open http://localhost:5173. With no configuration it runs on the **demo catalog*
 
 To use a real OpenMetadata, start it from [`deploy/openmetadata`](deploy/openmetadata/README.md), set `OM_URL` in `.env` (copy `.env.example`), and optionally `npm run seed:om` to fill it with the same sample content. To run Malloy queries, set `BQ_PROJECT_ID` and sign in with `gcloud auth application-default login`.
 
+## Running it for a team
+
+For a team with Google sign-in, a GCS bucket, a BigQuery dataset and one long-running Python job, but no server people can reach, the app runs on each person's machine and shares one backend through the bucket ([docs/team-backend.md](docs/team-backend.md)):
+
+- A **worker** (`worker/`, Python) is the only thing that talks to OpenMetadata. It publishes a snapshot of the catalog and a change feed to the bucket, and applies everyone's changes from request files.
+- Each **app** (`APP_BACKEND=team`) loads the snapshot, follows the feed, answers reads from memory, and sends changes to the worker. Browsing keeps working when the worker is down; changes queue.
+
+For now everything can run on one machine, with a local folder as the bucket:
+
+```sh
+npm run worker                                 # the worker, next to a local OpenMetadata (deploy/openmetadata)
+APP_BACKEND=team npm run dev                   # the app, reading from the bucket folder (.team-bucket/)
+```
+
+`TEAM_BUCKET=gs://bucket/prefix` and `TEAM_AUTH=google` switch to Google Cloud Storage and Google sign-in.
+
 ## What's in it
 
 | Area | Pages |

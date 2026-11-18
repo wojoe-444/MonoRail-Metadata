@@ -1,17 +1,23 @@
-import { CONFIG, DEMO_MODE } from '../config'
-import { demoApp } from './demo/app'
+import { BACKEND, CONFIG } from '../config'
+import { teamFetch } from '../team'
+import { demoApp, ensureDemoSeeded } from './demo/app'
 
 /**
  * The one way server code talks to OpenMetadata. `path` is relative to
  * `/api/v1`, e.g. `/tables/name/x.y.z?fields=columns`.
  *
- * With OM_URL set it calls the real server with a bot token (or a basic-auth
- * login). Without it, the request goes to the in-process demo catalog, which
- * answers the same endpoints, so the rest of the app can't tell the difference.
+ * - direct (OM_URL set): calls the real server with a bot token or a basic-auth login.
+ * - demo: the in-process demo catalog, which answers the same endpoints.
+ * - team: the replica and the shared worker (server/team, docs/team-backend.md).
+ * The rest of the app can't tell the difference.
  */
 export async function omFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const p = path.startsWith('/') ? path : `/${path}`
-  if (DEMO_MODE) return demoApp.request(`/api/v1${p}`, init)
+  if (BACKEND === 'team') return teamFetch(p, init)
+  if (BACKEND === 'demo') {
+    ensureDemoSeeded()
+    return demoApp.request(`/api/v1${p}`, init)
+  }
 
   const send = async (token: string) => {
     const headers = new Headers(init.headers)

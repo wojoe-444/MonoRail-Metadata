@@ -25,6 +25,10 @@ export async function api<T>(path: string, init: RequestInit & { json?: unknown 
   } catch {
     body = text
   }
+  // 202 from the team backend: the write is queued but the worker hasn't applied it yet.
+  if (res.status === 202 && body && typeof body === 'object' && 'queued' in body) {
+    throw new ApiError(202, String((body as { message?: unknown }).message ?? 'Queued'), body)
+  }
   if (!res.ok) {
     const msg =
       (body && typeof body === 'object' && 'message' in body ? String((body as { message: unknown }).message) : text) || res.statusText
