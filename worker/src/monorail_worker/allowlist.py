@@ -1,37 +1,29 @@
-"""Which `om` requests the worker will make (docs/team-backend.md, "Allowlist")."""
+"""Which `om` requests the worker will make (docs/team-backend.md, "Allowlist").
+
+The lists live in `allowlist.json`, which the app reads too (server/team/allowlist.ts) so it can
+refuse a request before queueing it, with the same status and message. The logic here and there
+must match; tests/test_allowlist.py runs the same cases through both.
+"""
 
 from __future__ import annotations
 
+import json
+from importlib import resources
 from urllib.parse import unquote
+
+RULES = json.loads(resources.files(__package__).joinpath("allowlist.json").read_text(encoding="utf-8"))
 
 WRITE_METHODS = {"PUT", "POST", "PATCH", "DELETE"}
 METHODS = WRITE_METHODS | {"GET"}
 
 # GET is allowed on everything except these (and anything under them).
-GET_DENY = ("/bots", "/system/settings", "/users/generateToken", "/users/token", "/users/auth-mechanism")
-
-# Writes are allowed on these collections and anything under them.
-WRITE_COLLECTIONS = (
-    "tables",
-    "databases",
-    "databaseSchemas",
-    "glossaries",
-    "glossaryTerms",
-    "classifications",
-    "tags",
-    "domains",
-    "dataProducts",
-    "metrics",
-    "queries",
-    "teams",
-    "dataQuality",
-    "services/ingestionPipelines",
-    "lineage",
-    "feed",
-    "usage",
-)
+GET_DENY: tuple[str, ...] = tuple(RULES["getDeny"])
+# Writes are allowed on these collections and anything under them...
+WRITE_COLLECTIONS: tuple[str, ...] = tuple(RULES["writeCollections"])
 # ...and on these sub-resources of any entity: /{collection}/{id}/followers[/{userId}], /{collection}/{id}/votes.
-WRITE_SUBRESOURCES = ("followers", "votes")
+WRITE_SUBRESOURCES: tuple[str, ...] = tuple(RULES["writeSubresources"])
+# Request headers passed through to OpenMetadata (lower case).
+PASS_HEADERS: frozenset[str] = frozenset(RULES["passHeaders"])
 
 
 def normalize(path: str) -> str | None:

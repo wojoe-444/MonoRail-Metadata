@@ -46,7 +46,7 @@ from .ulid import floor_ulid, is_ulid, now_ms, ulid_time
 log = logging.getLogger(__name__)
 
 IDEMPOTENT = {"GET", "PUT", "DELETE"}
-PASS_HEADERS = {"content-type"}
+
 HOUSEKEEPING_MS = 3_600_000
 
 
@@ -301,7 +301,7 @@ class Worker:
         method = req.method or "GET"
         path = allowlist.normalize(req.path or "") or ""
         query = req.query or {}
-        headers = {k: v for k, v in (req.headers or {}).items() if k.lower() in PASS_HEADERS}
+        headers = {k: v for k, v in (req.headers or {}).items() if k.lower() in allowlist.PASS_HEADERS}
         body = req.body
         has_body = method in ("PUT", "POST", "PATCH") or (method == "DELETE" and body is not None)
         stage = (inflight or {}).get("stage")

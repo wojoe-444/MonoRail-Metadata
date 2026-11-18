@@ -1,6 +1,7 @@
 import { CONFIG } from '../config'
 import { demoApp } from '../om/demo/app'
 import { store } from '../om/demo/store'
+import { check as allowed, PASS_HEADERS } from './allowlist'
 import { accessToken, currentIdentity, googleMode, NotSignedIn } from './identity'
 import { send, StillQueued } from './queue'
 import { Replica } from './replica'
@@ -63,10 +64,12 @@ export async function teamFetch(path: string, init: RequestInit = {}): Promise<R
     }
   }
 
-  // Everything else goes to the worker.
+  // Everything else goes to the worker. Refuse what it would refuse before queueing, with its status and message.
+  const [ok, why] = allowed(method, url.pathname)
+  if (!ok) return json(403, { code: 403, message: why, error: 'forbidden' })
   const headers: Record<string, string> = {}
   new Headers(init.headers).forEach((v, k) => {
-    if (k.toLowerCase() === 'content-type') headers['Content-Type'] = v
+    if (PASS_HEADERS.has(k.toLowerCase())) headers[k.toLowerCase() === 'content-type' ? 'Content-Type' : k] = v
   })
   let body: unknown = undefined
   if (init.body !== undefined && init.body !== null) {

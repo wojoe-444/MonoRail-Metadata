@@ -1,3 +1,8 @@
+import json
+import shutil
+import subprocess
+from pathlib import Path
+
 import pytest
 
 from monorail_worker import allowlist
@@ -5,83 +10,40 @@ from monorail_worker.config import Settings
 from monorail_worker.identity import AuthError, Identity, email_allowed
 from monorail_worker.protocol import GoogleAuth, LocalAuth
 
-T = "/tables/0a51e62b-5121-48a5-8aa6-86888b01be67"
-U = "7f517ae8-6d8e-446d-83fc-05f88a445bd4"
+CASES_FILE = Path(__file__).with_name("allowlist_cases.json")
+CASES = json.loads(CASES_FILE.read_text(encoding="utf-8"))
+REPO = Path(__file__).resolve().parents[2]
 
 
-@pytest.mark.parametrize(
-    "method,path",
-    [
-        ("GET", "/tables"),
-        ("GET", T),
-        ("GET", "/tables/name/bigquery.acme.marts.orders"),
-        ("GET", "/users/name/ada.park"),
-        ("GET", "/search/query"),
-        ("GET", "/system/version"),
-        ("PATCH", T),
-        ("PUT", "/tables"),
-        ("DELETE", T),
-        ("PUT", "/glossaryTerms"),
-        ("PATCH", "/dataQuality/testCases/" + U),
-        ("POST", "/dataQuality/testCases/testCaseResults/a.b.c"),
-        ("PUT", "/services/ingestionPipelines"),
-        ("POST", "/services/ingestionPipelines/trigger/" + U),
-        ("PUT", "/lineage"),
-        ("DELETE", f"/lineage/table/{U}/table/{U}"),
-        ("POST", "/feed"),
-        ("POST", f"/feed/{U}/posts"),
-        ("POST", f"/usage/table/{U}"),
-        ("PUT", f"{T}/followers"),
-        ("DELETE", f"{T}/followers/{U}"),
-        ("PUT", f"/services/databaseServices/{U}/followers"),
-        ("PUT", f"{T}/votes"),
-        ("PUT", "/dataProducts/revenue/assets/add"),
-        ("PUT", "/teams"),
-    ],
-)
-def test_allowed(method, path):
-    ok, why = allowlist.check(method, path)
-    assert ok, why
+@pytest.mark.parametrize("case", CASES, ids=[f"{c['method']} {c['path']!r}"[:80] for c in CASES])
+def test_cases(case):
+    ok, why = allowlist.check(case["method"], case["path"])
+    assert ok == case["allowed"], why
+    assert bool(why) != ok
 
 
-@pytest.mark.parametrize(
-    "method,path",
-    [
-        ("GET", "/bots"),
-        ("GET", "/bots/name/ingestion-bot"),
-        ("GET", "/system/settings"),
-        ("GET", "/system/settings/emailConfiguration"),
-        ("GET", "/users/token/" + U),
-        ("GET", "/users/generateToken/" + U),
-        ("GET", "/users/auth-mechanism/" + U),
-        ("GET", "/USERS/TOKEN/" + U),
-        ("PUT", "/users"),
-        ("PATCH", "/users/" + U),
-        ("PUT", "/users/generateToken/" + U),
-        ("PUT", "/services/databaseServices"),
-        ("PATCH", "/services/databaseServices/" + U),
-        ("POST", "/bots"),
-        ("PUT", "/roles"),
-        ("PUT", "/policies"),
-        ("PUT", "/system/settings"),
-        ("PUT", "/followers"),
-        ("PUT", f"/users/{U}/votes/{U}"),
-        ("HEAD", T),
-        ("TRACE", T),
-        ("GET", "/tables/../bots"),
-        ("GET", "/tables/%2e%2e/bots"),
-        ("GET", "tables"),
-        ("GET", "//evil.example/x"),
-        ("GET", "http://evil.example/api/v1/tables"),
-        ("GET", "/tables?fields=*"),
-        ("GET", "/api/v1/tables"),
-        ("GET", "/tables\\x"),
-        (None, T),
-    ],
-)
-def test_refused(method, path):
-    ok, why = allowlist.check(method, path)
-    assert not ok and why
+def _tsx() -> list[str] | None:
+    node = shutil.which("node")
+    cli = REPO / "node_modules" / "tsx" / "dist" / "cli.mjs"
+    return [node, str(cli)] if node and cli.exists() else None
+
+
+@pytest.mark.skipif(_tsx() is None, reason="node and the repo's node_modules (tsx) are needed to run the app's copy")
+def test_app_copy_matches_worker():
+    """server/team/allowlist.ts gives the same answer and the same message for every case."""
+    out = subprocess.run(
+        [*_tsx(), "scripts/allowlist-parity.ts", str(CASES_FILE)], cwd=REPO, capture_output=True, text=True, encoding="utf-8", timeout=120
+    )
+    assert out.returncode == 0, out.stderr
+    app = json.loads(out.stdout)
+    assert len(app) == len(CASES)
+    for case, (ok, why) in zip(CASES, app):
+        assert [ok, why] == list(allowlist.check(case["method"], case["path"])), case
+
+
+def test_rules_come_from_the_shared_file():
+    assert "/bots" in allowlist.GET_DENY and "tables" in allowlist.WRITE_COLLECTIONS
+    assert allowlist.PASS_HEADERS == {"content-type"}
 
 
 def test_normalize():
