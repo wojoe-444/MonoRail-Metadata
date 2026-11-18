@@ -2,7 +2,7 @@ import jsonpatch from 'fast-json-patch'
 
 import { href } from '@/lib/router'
 
-import type { PatchOp } from './api'
+import { COLLECTION, type PatchOp } from './api'
 import type { AssetCertification, EntityBase, EntityReference, TagLabel } from './types'
 
 /** The name to show for an entity or reference. */
@@ -42,8 +42,14 @@ export function entityPath(entityType: string, fqn: string): string {
     case 'metric':
       return `/metrics?metric=${q}`
     default:
-      return `/explore?q=${q}`
+      // Every other OpenMetadata type opens on the OpenMetadata page.
+      return entityType in COLLECTION ? openMetadataPath(entityType, fqn) : `/explore?q=${q}`
   }
+}
+
+/** The entity on the OpenMetadata page, which shows any entity type the way OpenMetadata stores it. */
+export function openMetadataPath(entityType: string, fqn?: string): string {
+  return `/openmetadata?type=${encodeURIComponent(entityType)}${fqn ? `&fqn=${encodeURIComponent(fqn)}` : ''}`
 }
 
 export function entityHref(entityType: string, fqn: string): string {
@@ -75,6 +81,37 @@ export const ENTITY_LABEL: Record<string, string> = {
   dashboard: 'Dashboard',
   pipeline: 'Pipeline',
   topic: 'Topic',
+  storedProcedure: 'Stored procedure',
+  chart: 'Chart',
+  dashboardDataModel: 'Dashboard data model',
+  mlmodel: 'ML model',
+  container: 'Container',
+  searchIndex: 'Search index',
+  apiCollection: 'API collection',
+  apiEndpoint: 'API endpoint',
+  directory: 'Directory',
+  file: 'File',
+  spreadsheet: 'Spreadsheet',
+  worksheet: 'Worksheet',
+  dashboardService: 'Dashboard service',
+  messagingService: 'Messaging service',
+  pipelineService: 'Pipeline service',
+  mlmodelService: 'ML model service',
+  storageService: 'Storage service',
+  searchService: 'Search service',
+  apiService: 'API service',
+  metadataService: 'Metadata service',
+  securityService: 'Security service',
+  driveService: 'Drive service',
+  dataContract: 'Data contract',
+  testDefinition: 'Test definition',
+  role: 'Role',
+  policy: 'Policy',
+  persona: 'Persona',
+  eventsubscription: 'Alert',
+  app: 'App',
+  kpi: 'KPI',
+  type: 'Type',
 }
 
 /** "Project" and "Dataset" are BigQuery's names for OpenMetadata's database and schema. */
