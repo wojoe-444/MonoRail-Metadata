@@ -165,6 +165,8 @@ class Worker:
         except Exception as e:
             log.warning("TEAM_IMPERSONATE: couldn't check the worker's OpenMetadata account: %s", e)
             return
+        if self.settings.team_auth == "local":
+            log.warning("TEAM_IMPERSONATE with TEAM_AUTH=local: identities are typed names, not verified. Use TEAM_AUTH=google beyond one machine.")
         if not body.get("isBot"):
             log.error(
                 "TEAM_IMPERSONATE=true, but the worker signs in to OpenMetadata as %s, which is not a bot. "

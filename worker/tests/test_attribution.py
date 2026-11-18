@@ -141,6 +141,7 @@ def test_impersonation_warns_without_a_bot(settings, storage, om, catalog, clock
     w = make_worker(settings, storage, om, clock)
     w.run_once()
     assert "not a bot" in caplog.text
+    assert "identities are typed names" in caplog.text  # TEAM_AUTH=local
 
 
 def test_om_client_passes_the_impersonation_header(monkeypatch):
