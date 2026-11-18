@@ -30,12 +30,14 @@ function collectionPaths(): string[] {
 
 /**
  * Whether a GET can be answered from the replica: entity lists and lookups (without
- * sub-resources such as /versions), search, facets and lineage. Profiles, sample data,
- * versions, test results and activity go to the worker.
+ * sub-resources such as /versions), search, facets, lineage, and each table's latest profile
+ * when the snapshot carries profiles. Profile history, sample data, versions, test results and
+ * activity go to the worker.
  */
 function servedLocally(pathname: string): boolean {
   if (/^\/search\/(query|aggregate)$/.test(pathname)) return true
   if (pathname === '/lineage/getLineage') return true
+  if (replica.hasProfiles && /^\/tables\/[^/]+\/tableProfile\/latest$/.test(pathname)) return true
   for (const c of collectionPaths()) {
     if (pathname === `/${c}`) return true
     if (pathname.startsWith(`/${c}/name/`) && !/\/(versions|followers|votes)(\/|$)/.test(pathname.slice(c.length + 7))) return true
@@ -124,6 +126,7 @@ export function teamStatus() {
     replica: {
       ready: replica.loadedAt > 0,
       seq: replica.seq,
+      profiles: replica.hasProfiles,
       loadedAt: replica.loadedAt || null,
       counts: replica.counts(),
       error: replica.lastError ?? null,

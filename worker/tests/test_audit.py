@@ -82,3 +82,16 @@ def test_insert_is_parameterized():
     first = api["parameterValue"]["arrayValues"][0]["structValues"]
     assert first["by"]["value"] == "ada'; DROP TABLE x; --"
     assert first["seq"]["value"] == "7" and first["entity_type"]["value"] == "table"
+
+
+def test_rows_for_profiles():
+    ev = P.feed_event(
+        8,
+        1,
+        by="ada",
+        request_id=None,
+        source="request",
+        changes=[P.profile_upsert({"id": "t1", "fullyQualifiedName": "a.b.c.t", "profile": {"rowCount": 3}, "columns": []}), P.profile_delete("t2")],
+    )
+    rows = rows_for(ev)
+    assert [(r["op"], r["entity_type"], r["entity_id"]) for r in rows] == [("profile.upsert", "tableProfile", "t1"), ("profile.delete", "tableProfile", "t2")]

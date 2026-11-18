@@ -147,7 +147,11 @@ class Worker:
             # A snapshot written for a resync whose event never landed (crash): fill the hole.
             if int(man.get("seq", 0)) > self.feed.seq:
                 self.feed.append([P.RESYNC], by=None, source="resync", seq=int(man["seq"]))
-            self.state.load(ex.by_type(), ex.edges)
+            if not ex.has_profiles:
+                # Written before snapshots carried profiles: apps holding it don't serve them, so make them reload.
+                self.resync(by=None, request_id=None)
+                return
+            self.state.load(ex.by_type(), ex.edges, ex.profiles)
             self._replay_feed_into_state(int(man.get("seq", 0)))
         self._snapshot(publish_diff=prev is not None, force=True)
 
@@ -164,7 +168,7 @@ class Worker:
                 self._publish(changes, by=None, source="om-events")
                 changed = True
         else:
-            self.state.load(ex.by_type(), ex.edges)
+            self.state.load(ex.by_type(), ex.edges, ex.profiles)
         if not (force or changed or self.feed.seq != self.snapshot_seq):
             return None
         man = snapshot.write(self.storage, ex, self.feed.seq, self.clock())
@@ -176,9 +180,10 @@ class Worker:
         """Rebuild the snapshot and announce it: the manifest gets the event's seq, written first."""
         seq = self.feed.seq + 1
         ex = snapshot.export(self.om, self.fields)
+        snapshot.carry_profiles(self.state, ex)
         snapshot.write(self.storage, ex, seq, self.clock())
         ev = self.feed.append([P.RESYNC], by=by, source=source, request_id=request_id, seq=seq)
-        self.state.load(ex.by_type(), ex.edges)
+        self.state.load(ex.by_type(), ex.edges, ex.profiles)
         self.snapshot_seq = ev["seq"]
         self._audit(ev)
         return int(ev["seq"])

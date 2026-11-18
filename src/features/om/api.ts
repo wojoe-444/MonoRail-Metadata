@@ -271,7 +271,14 @@ export interface TeamStatus {
   bucket: string
   auth: 'local' | 'google'
   identity: { kind: 'local' | 'google'; user?: string; signedIn: boolean }
-  replica: { ready: boolean; seq: number; loadedAt: number | null; counts: Record<string, number>; error: string | null }
+  replica: {
+    ready: boolean
+    seq: number
+    loadedAt: number | null
+    profiles?: boolean
+    counts: Record<string, number>
+    error: string | null
+  }
   worker: { online: boolean; lastSeen: number | null; id?: string; version?: string; omVersion?: string; backlog?: number | null }
 }
 

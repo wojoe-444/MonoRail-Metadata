@@ -10,8 +10,9 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from typing import Any, Mapping
-from urllib.parse import unquote
+from urllib.parse import quote, unquote
 
+from . import profiles
 from . import protocol as P
 from . import sanitize
 from .entities import COLLECTIONS, TYPE_TO_COLLECTION, collection_from_href, is_uuid, split_collection
@@ -73,11 +74,19 @@ class EdgesOf:
 
 
 @dataclass(frozen=True)
+class ProfileOf:
+    """Re-read a table's latest profile (after a queued profile write). By id or by FQN."""
+
+    table_id: str = ""
+    fqn: str = ""
+
+
+@dataclass(frozen=True)
 class Resync:
     pass
 
 
-Target = EntityById | EntityByName | Deleted | EdgeRead | EdgeDelete | EdgeDeleteByName | EdgesOf | Resync
+Target = EntityById | EntityByName | Deleted | EdgeRead | EdgeDelete | EdgeDeleteByName | EdgesOf | ProfileOf | Resync
 
 # On create and delete, these parents' derived fields (children, counts, lists) change too.
 RELATED_REFS: dict[str, tuple[str, ...]] = {
@@ -176,6 +185,13 @@ def resolve(
             if isinstance(a, dict) and a.get("type") in TYPE_TO_COLLECTION and a.get("id"):
                 targets.append(EntityById(TYPE_TO_COLLECTION[a["type"]], a["id"]))
         return targets
+
+    # Table profiles. PUT /tables/{id}/tableProfile: the table and its latest profile.
+    # DELETE /tables/{fqn}/{table|column}/{timestamp}/profile: the latest profile of that table (or the column's table).
+    if coll == "tables" and len(rest) == 2 and is_uuid(rest[0]) and rest[1] == "tableProfile" and method == "PUT":
+        return [EntityById(coll, rest[0]), ProfileOf(table_id=rest[0])]
+    if coll == "tables" and method == "DELETE" and len(rest) == 4 and rest[3] == "profile" and rest[1] in ("table", "column"):
+        return [ProfileOf(fqn=rest[0])] if rest[1] == "table" else [ProfileOf(fqn="column:" + rest[0])]
 
     # Followers and votes: the parent entity.
     if len(rest) >= 2 and is_uuid(rest[0]) and rest[1] in ("followers", "votes"):
@@ -277,6 +293,7 @@ def materialize(
     skip_unchanged drops upserts apps already hold (used for OpenMetadata change events)."""
     entity_changes: dict[str, dict[str, Any]] = {}
     edge_changes: dict[tuple[str, str], dict[str, Any]] = {}
+    profile_changes: dict[str, dict[str, Any]] = {}
 
     def entity_change(c: dict[str, Any]) -> None:
         eid = c["entity"]["id"] if c["op"] == "upsert" else c["id"]
@@ -338,6 +355,48 @@ def materialize(
             if kind == "upsert" and val.get("fullyQualifiedName"):
                 for edge in lineage_of(om, tg.entity_type, val["fullyQualifiedName"]):
                     edge_changes[(edge["fromEntity"]["id"], edge["toEntity"]["id"])] = P.lineage_upsert(edge)
+        elif isinstance(tg, ProfileOf):
+            tid, fqn = _profile_table(tg, om, state, entity_changes)
+            rec = profiles.read(om, fqn) if fqn else None
+            if rec:
+                if not (skip_unchanged and state.same_profile(rec)):
+                    profile_changes[rec["id"]] = P.profile_upsert(rec)
+            elif tid and state.profile(tid):
+                profile_changes[tid] = P.profile_delete(tid)
 
     # Deleting an edge that apps never had is harmless, but don't announce it twice.
-    return list(entity_changes.values()) + list(edge_changes.values())
+    return list(entity_changes.values()) + list(edge_changes.values()) + list(profile_changes.values())
+
+
+def _profile_table(tg: ProfileOf, om: Om, state: ReplicaState, entity_changes: dict[str, dict[str, Any]]) -> tuple[str, str]:
+    """(table id, table FQN) for a ProfileOf target. Raises NeedResync if the table can't be found."""
+    if tg.fqn.startswith("column:"):
+        rec = state.table_of_column(tg.fqn.removeprefix("column:"))
+        if rec is None:
+            raise NeedResync()
+        return rec["id"], rec.get("fullyQualifiedName") or ""
+    if tg.fqn:
+        cur = next((r for r, _ in state.profiles.values() if r.get("fullyQualifiedName") == tg.fqn), None)
+        if cur:
+            return cur["id"], tg.fqn
+        e = get_entity_ref(om, f"/tables/name/{quote(tg.fqn, safe='')}")
+        return (e.get("id", ""), tg.fqn) if e else ("", tg.fqn)
+    c = entity_changes.get(tg.table_id)
+    if c and c["op"] == "upsert":
+        return tg.table_id, c["entity"].get("fullyQualifiedName") or ""
+    cur = state.profile(tg.table_id)
+    if cur and cur.get("fullyQualifiedName"):
+        return tg.table_id, cur["fullyQualifiedName"]
+    e = get_entity_ref(om, f"/tables/{tg.table_id}")
+    if not e:
+        return tg.table_id, ""
+    return tg.table_id, e.get("fullyQualifiedName") or ""
+
+
+def get_entity_ref(om: Om, path: str) -> dict[str, Any] | None:
+    res = om.request("GET", path, {"include": "all"})
+    if res.status == 404:
+        return None
+    if res.status >= 400:
+        raise OmError(res.status, res.body, f"GET {path}")
+    return res.body if isinstance(res.body, dict) else None

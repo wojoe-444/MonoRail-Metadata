@@ -120,6 +120,15 @@ def lineage_delete(from_id: str, to_id: str) -> dict[str, Any]:
     return {"op": "lineage.delete", "fromId": from_id, "toId": to_id}
 
 
+def profile_upsert(record: dict[str, Any]) -> dict[str, Any]:
+    """A table's latest profile (profiles.record)."""
+    return {"op": "profile.upsert", "profile": record}
+
+
+def profile_delete(table_id: str) -> dict[str, Any]:
+    return {"op": "profile.delete", "tableId": table_id}
+
+
 RESYNC = {"op": "resync"}
 
 
@@ -135,15 +144,19 @@ def head(seq: int, ts: int) -> dict[str, Any]:
 
 # ---------- snapshot ----------
 def manifest(
-    seq: int, ts: int, om_version: str, entities: list[dict[str, Any]], lineage_file: str, lineage_count: int
+    seq: int,
+    ts: int,
+    om_version: str,
+    entities: list[dict[str, Any]],
+    lineage_file: str,
+    lineage_count: int,
+    profiles_file: str | None = None,
+    profiles_count: int = 0,
 ) -> dict[str, Any]:
-    return {
-        "v": V,
-        "seq": seq,
-        "ts": ts,
-        "omVersion": om_version,
-        "files": {"entities": entities, "lineage": {"file": lineage_file, "count": lineage_count}},
-    }
+    files: dict[str, Any] = {"entities": entities, "lineage": {"file": lineage_file, "count": lineage_count}}
+    if profiles_file:
+        files["profiles"] = {"file": profiles_file, "count": profiles_count}
+    return {"v": V, "seq": seq, "ts": ts, "omVersion": om_version, "files": files}
 
 
 # ---------- liveness ----------

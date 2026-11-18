@@ -13,6 +13,7 @@ from monorail_worker.touched import (
     EntityByName,
     FieldsPolicy,
     NeedResync,
+    ProfileOf,
     Resync,
     materialize,
     resolve,
@@ -46,7 +47,9 @@ HREF = f"http://localhost:8585/api/v1/tables/{A}"
         ),
         # sub-resources of a table: the table
         ("PUT", f"/tables/{A}/sampleData", None, {}, 200, {"id": A, "href": HREF}, [EntityById("tables", A)]),
-        ("PUT", f"/tables/{A}/tableProfile", None, {}, 201, None, [EntityById("tables", A)]),
+        ("PUT", f"/tables/{A}/tableProfile", None, {}, 201, None, [EntityById("tables", A), ProfileOf(table_id=A)]),
+        ("DELETE", "/tables/a.b.c.d/table/1794961619156/profile", None, None, 200, None, [ProfileOf(fqn="a.b.c.d")]),
+        ("DELETE", "/tables/a.b.c.d.col/column/1794961619156/profile", None, None, 200, None, [ProfileOf(fqn="column:a.b.c.d.col")]),
         # followers and votes: the parent entity
         ("PUT", f"/tables/{A}/followers", None, B, 200, {"changeDescription": {}}, [EntityById("tables", A)]),
         ("DELETE", f"/tables/{A}/followers/{B}", None, None, 200, {}, [EntityById("tables", A)]),

@@ -2,7 +2,8 @@
 
 Export pages through every collection with `fields=*` (falling back to a per-collection field list
 if OpenMetadata rejects `*`), strips secrets, walks each table's (and metric's) lineage one hop up
-and down, and de-duplicates the edges. Files are written first, the manifest last.
+and down, de-duplicates the edges, and reads each table's latest profile (profiles.py). Files are
+written first, the manifest last.
 
 File names carry the snapshot's timestamp (`table.1794955000000.json.gz`), so a reader holding an
 older manifest never reads a newer file under the same name. Old files are removed by housekeeping.
@@ -14,6 +15,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+from . import profiles as profiles_mod
 from . import protocol as P
 from . import sanitize
 from .entities import COLLECTIONS, FALLBACK_FIELDS
@@ -33,6 +35,10 @@ LINEAGE_TYPES = ("tables", "metrics")
 class Export:
     entities: dict[str, list[dict[str, Any]]] = field(default_factory=dict)  # collection -> entities
     edges: list[Edge] = field(default_factory=list)
+    profiles: list[dict[str, Any]] = field(default_factory=list)  # profiles.record per profiled table
+    # Tables whose profile couldn't be read: a diff keeps what apps hold for them.
+    profile_failed: set[str] = field(default_factory=set)
+    has_profiles: bool = True  # False for a snapshot written before profiles were exported
     om_version: str = ""
 
     def by_type(self) -> dict[str, list[dict[str, Any]]]:
@@ -90,6 +96,7 @@ def export(om: Om, fields: FieldsPolicy) -> Export:
             except OmError as err:
                 log.warning("lineage of %s %s failed: %s", etype, fqn, err)
     ex.edges = dedupe(edges)
+    ex.profiles, ex.profile_failed = profiles_mod.export(om, ex.entities.get("tables", []))
     return ex
 
 
@@ -102,7 +109,9 @@ def write(storage: Storage, ex: Export, seq: int, ts: int) -> dict[str, Any]:
         files.append({"entityType": etype, "path": coll, "file": name, "count": len(items)})
     lineage_name = f"lineage.{ts}.json.gz"
     write_json(storage, P.CATALOG + lineage_name, ex.edges)
-    man = P.manifest(seq, ts, ex.om_version, files, lineage_name, len(ex.edges))
+    profiles_name = f"tableProfile.{ts}.json.gz"
+    write_json(storage, P.CATALOG + profiles_name, ex.profiles)
+    man = P.manifest(seq, ts, ex.om_version, files, lineage_name, len(ex.edges), profiles_name, len(ex.profiles))
     write_json(storage, P.MANIFEST, man)  # last
     return man
 
@@ -117,6 +126,9 @@ def load(storage: Storage) -> tuple[dict[str, Any], Export] | None:
         for f in man["files"]["entities"]:
             ex.entities[f["path"]] = read_json(storage, P.CATALOG + f["file"]) or []
         ex.edges = read_json(storage, P.CATALOG + man["files"]["lineage"]["file"]) or []
+        prof = man["files"].get("profiles")
+        ex.has_profiles = bool(prof)
+        ex.profiles = (read_json(storage, P.CATALOG + prof["file"]) or []) if prof else []
         return man, ex
     except Exception:
         log.exception("couldn't read the current snapshot")
@@ -127,15 +139,19 @@ def referenced_files(man: dict[str, Any] | None) -> set[str]:
     if not man:
         return set()
     out = {P.CATALOG + f["file"] for f in man.get("files", {}).get("entities", [])}
-    lin = man.get("files", {}).get("lineage", {}).get("file")
-    if lin:
-        out.add(P.CATALOG + lin)
+    for part in ("lineage", "profiles"):
+        name = (man.get("files", {}).get(part) or {}).get("file")
+        if name:
+            out.add(P.CATALOG + name)
     return out
 
 
 def diff(state: ReplicaState, new: Export) -> list[dict[str, Any]]:
     """Changes that bring what apps hold (`state`) to `new`: upserts for new or changed entities,
-    deletes for vanished ones, and the same for lineage edges."""
+    deletes for vanished ones, and the same for lineage edges and latest profiles.
+
+    Profiles that couldn't be read this time (`new.profile_failed`) are carried over from `state`
+    into `new`, so neither the diff nor the snapshot written next drops them."""
     changes: list[dict[str, Any]] = []
     seen: set[str] = set()
     for coll, items in new.entities.items():
@@ -157,4 +173,24 @@ def diff(state: ReplicaState, new: Export) -> list[dict[str, Any]]:
     for k in list(state.edges):
         if k not in new_keys:
             changes.append(P.lineage_delete(*k))
+    carry_profiles(state, new)
+    new_ids = set()
+    for r in new.profiles:
+        new_ids.add(r["id"])
+        if not state.same_profile(r):
+            changes.append(P.profile_upsert(r))
+    for tid in list(state.profiles):
+        # A deleted table's profile goes with the entity delete above.
+        if tid not in new_ids and tid in seen:
+            changes.append(P.profile_delete(tid))
     return changes
+
+
+def carry_profiles(state: ReplicaState, new: Export) -> None:
+    """Keep the last known record for tables whose profile read failed in this export."""
+    have = {r["id"] for r in new.profiles}
+    for tid in new.profile_failed:
+        old = state.profile(tid)
+        if old and tid not in have:
+            new.profiles.append(old)
+    new.profile_failed = set()

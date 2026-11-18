@@ -47,6 +47,11 @@ def rows_for(event: dict[str, Any]) -> list[dict[str, Any]]:
             etype, eid, entity = "lineageEdge", f'{edge.get("fromEntity", {}).get("id")}->{edge.get("toEntity", {}).get("id")}', edge
         elif op == "lineage.delete":
             etype, eid = "lineageEdge", f'{c.get("fromId")}->{c.get("toId")}'
+        elif op == "profile.upsert":
+            rec = c.get("profile") or {}
+            etype, eid, entity = "tableProfile", rec.get("id"), rec
+        elif op == "profile.delete":
+            etype, eid = "tableProfile", c.get("tableId")
         rows.append(
             {
                 "seq": int(event["seq"]),

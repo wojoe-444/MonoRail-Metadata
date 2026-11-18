@@ -1,4 +1,4 @@
-import { store, type Entity, type LineageEdge } from '../om/demo/store'
+import { store, type Entity, type LineageEdge, type ResultRow } from '../om/demo/store'
 import { readJson, type Bucket } from './storage'
 
 /**
@@ -16,13 +16,24 @@ interface Manifest {
   files: {
     entities: { entityType: string; path: string; file: string; count: number }[]
     lineage?: { file: string; count: number }
+    /** Each table's latest profile (an older worker leaves this out). */
+    profiles?: { file: string; count: number }
   }
+}
+
+/** A table's latest profile, as the worker exports it (docs/team-backend.md, "Snapshot"). */
+export interface ProfileRecord {
+  id: string
+  fullyQualifiedName?: string
+  profile: ResultRow | null
+  columns: { fullyQualifiedName: string; profile: ResultRow }[]
 }
 
 interface FeedEvent {
   seq: number
   ts: number
   by?: string
+  byUser?: { id: string; name: string } | null
   requestId?: string | null
   source: 'request' | 'om-events' | 'resync'
   changes: Change[]
@@ -33,6 +44,8 @@ type Change =
   | { op: 'delete'; entityType: string; id: string }
   | { op: 'lineage.upsert'; edge: LineageEdge }
   | { op: 'lineage.delete'; fromId: string; toId: string }
+  | { op: 'profile.upsert'; profile: ProfileRecord }
+  | { op: 'profile.delete'; tableId: string }
   | { op: 'resync' }
 
 export interface Heartbeat {
@@ -59,7 +72,11 @@ export class Replica {
   omVersion?: string
   lastError?: string
   heartbeat?: Heartbeat
+  /** Whether the snapshot carries latest profiles, so `/tables/{fqn}/tableProfile/latest` is answered locally. */
+  hasProfiles = false
   private pathOf = new Map<string, string>()
+  /** Latest profile records by table id, to drop a table's column profiles when its record changes. */
+  private profiles = new Map<string, ProfileRecord>()
   private waiters: { seq: number; resolve: () => void }[] = []
   private timer?: NodeJS.Timeout
   private polling = false
@@ -132,16 +149,22 @@ export class Replica {
     const edges = manifest.files.lineage
       ? ((await readJson<LineageEdge[]>(this.bucket, `state/catalog/${manifest.files.lineage.file}`)) ?? [])
       : []
+    const profiles = manifest.files.profiles
+      ? ((await readJson<ProfileRecord[]>(this.bucket, `state/catalog/${manifest.files.profiles.file}`)) ?? [])
+      : []
 
     // Swap in the new contents in one go, so readers never see a half-loaded catalog.
     store.reset()
     this.pathOf.clear()
+    this.profiles.clear()
     for (const { f, items } of files) {
       store.define(f.path, f.entityType, !NOT_SEARCHABLE.has(f.entityType))
       this.pathOf.set(f.entityType, f.path)
       for (const e of items) store.put(f.path, e)
     }
     for (const e of edges) store.lineage.set(`${e.fromEntity.id}->${e.toEntity.id}`, e)
+    for (const r of profiles) this.putProfile(r)
+    this.hasProfiles = Boolean(manifest.files.profiles)
     this.seq = manifest.seq
     this.omVersion = manifest.omVersion
     this.loadedAt = Date.now()
@@ -179,6 +202,7 @@ export class Replica {
       }
       case 'delete':
         store.remove(c.id)
+        this.dropProfile(c.id)
         return
       case 'lineage.upsert':
         store.lineage.set(`${c.edge.fromEntity.id}->${c.edge.toEntity.id}`, c.edge)
@@ -186,7 +210,32 @@ export class Replica {
       case 'lineage.delete':
         store.lineage.delete(`${c.fromId}->${c.toId}`)
         return
+      case 'profile.upsert':
+        this.putProfile(c.profile)
+        return
+      case 'profile.delete':
+        this.dropProfile(c.tableId)
+        return
     }
+  }
+
+  /**
+   * Latest profiles go into the demo store's profile maps (one row each), so the demo's
+   * `/tables/{fqn}/tableProfile/latest` handler answers from them, as it does in demo mode.
+   */
+  private putProfile(r: ProfileRecord) {
+    this.dropProfile(r.id)
+    this.profiles.set(r.id, r)
+    if (r.fullyQualifiedName && r.profile) store.tableProfiles.set(r.fullyQualifiedName, [r.profile])
+    for (const c of r.columns) store.columnProfiles.set(c.fullyQualifiedName, [c.profile])
+  }
+
+  private dropProfile(tableId: string) {
+    const old = this.profiles.get(tableId)
+    if (!old) return
+    this.profiles.delete(tableId)
+    if (old.fullyQualifiedName) store.tableProfiles.delete(old.fullyQualifiedName)
+    for (const c of old.columns) store.columnProfiles.delete(c.fullyQualifiedName)
   }
 
   counts(): Record<string, number> {

@@ -30,6 +30,12 @@ class FakeOm:
         self.calls: list[tuple[str, str]] = []
         self.crash_after: tuple[str, str] | None = None  # (method, path prefix): apply, then Crash
         self.reject_star: set[str] = set()  # collections that answer 400 to fields=*
+        # Latest profiles by table id: {"profile": {...} | None, "columns": {column name: {...}}}. 2.0.8 keeps
+        # history; the fake keeps only the latest, which is all the worker reads.
+        self.profiles: dict[str, dict[str, Any]] = {}
+        self.profile_fail: set[str] = set()  # table FQNs whose latest profile answers 500
+        self.headers: list[tuple[str, str, dict[str, str]]] = []  # (method, path, headers) of every call
+        self.logged_in: dict[str, Any] = {"name": "admin", "isBot": False}
 
     # ---------- setup ----------
     def add(self, coll: str, name: str, **fields: Any) -> dict[str, Any]:
@@ -81,6 +87,7 @@ class FakeOm:
         self, method: str, path: str, query: Mapping[str, Any] | None = None, headers: Mapping[str, str] | None = None, body: Any = NO_BODY
     ) -> OmResponse:
         self.calls.append((method, path))
+        self.headers.append((method, path, dict(headers or {})))
         res = self._route(method, path, dict(query or {}), body)
         if self.crash_after and method == self.crash_after[0] and path.startswith(self.crash_after[1]):
             self.crash_after = None
@@ -93,6 +100,10 @@ class FakeOm:
             return OmResponse(200, {"version": "2.0.8"})
         if path == "/events":
             return self._events(q)
+        if path == "/users/loggedInUser":
+            return OmResponse(200, dict(self.logged_in))
+        if len(segs) >= 3 and segs[0] == "tables" and "tableProfile" in segs or len(segs) == 5 and segs[0] == "tables" and segs[4] == "profile":
+            return self._profile(method, segs, body)
         if segs and segs[0] == "lineage":
             return self._lineage(method, segs, q, body)
         coll, rest = split_collection(path)
@@ -218,6 +229,58 @@ class FakeOm:
             return OmResponse(200, {"entity": self._node(eid), "nodes": nodes, "upstreamEdges": [], "downstreamEdges": down_edges})
         return OmResponse(404, {"message": "no lineage route"})
 
+    # ---------- profiles ----------
+    def set_profile(self, table: dict[str, Any], row_count: int, ts: int = 1_794_873_600_000, columns: dict[str, int] | None = None) -> None:
+        self.profiles[table["id"]] = {
+            "profile": {"timestamp": ts, "rowCount": row_count, "columnCount": len(table.get("columns", []))},
+            "columns": {n: {"name": n, "timestamp": ts, "nullCount": v} for n, v in (columns or {}).items()},
+        }
+
+    def _profile(self, method: str, segs: list[str], body: Any) -> OmResponse:
+        # GET /tables/{fqn}/tableProfile/latest
+        if method == "GET" and segs[2:] == ["tableProfile", "latest"]:
+            if segs[1] in self.profile_fail:
+                return OmResponse(500, {"message": "boom"})
+            t = self.by_fqn("tables", segs[1])
+            if t is None:
+                return OmResponse(404, {"message": "not found"})
+            p = self.profiles.get(t["id"], {})
+
+            def with_profiles(cs):
+                out = []
+                for c in cs:
+                    col = {**c}
+                    if c["name"] in p.get("columns", {}):
+                        col["profile"] = p["columns"][c["name"]]
+                    if c.get("children"):
+                        col["children"] = with_profiles(c["children"])
+                    out.append(col)
+                return out
+
+            cols = with_profiles(t.get("columns", []))
+            out = {"id": t["id"], "name": t["name"], "fullyQualifiedName": t["fullyQualifiedName"], "version": t["version"], "columns": cols}
+            if p.get("profile"):
+                out["profile"] = p["profile"]
+            return OmResponse(200, out)
+        # PUT /tables/{id}/tableProfile
+        if method == "PUT" and len(segs) == 3 and segs[2] == "tableProfile":
+            t = self.entities["tables"].get(segs[1])
+            if t is None:
+                return OmResponse(404, {"message": "not found"})
+            p = self.profiles.setdefault(t["id"], {"profile": None, "columns": {}})
+            p["profile"] = body["tableProfile"]
+            for c in body.get("columnProfile", []):
+                p["columns"][c["name"]] = c
+            return OmResponse(200, {**copy.deepcopy(t), "profile": body["tableProfile"]})
+        # DELETE /tables/{fqn}/table/{timestamp}/profile
+        if method == "DELETE" and len(segs) == 5 and segs[2] == "table":
+            t = self.by_fqn("tables", segs[1])
+            if t is None:
+                return OmResponse(404, {"message": "not found"})
+            self.profiles.pop(t["id"], None)
+            return OmResponse(200, None)
+        return OmResponse(404, {"message": "no profile route"})
+
     # ---------- change events ----------
     def _events(self, q: dict[str, Any]) -> OmResponse:
         after = int(base64.b64decode(q["after"]).decode()) if q.get("after") else 0
@@ -258,7 +321,22 @@ def seed(om: FakeOm) -> dict[str, dict[str, Any]]:
     )
     db = om.add("databases", "acme", parent_fqn="bigquery", service={"id": svc["id"], "type": "databaseService"})
     sch = om.add("databaseSchemas", "marts", parent_fqn="bigquery.acme", database={"id": db["id"], "type": "database"})
-    a = om.add("tables", "orders", parent_fqn="bigquery.acme.marts", description="Orders.", databaseSchema={"id": sch["id"], "type": "databaseSchema"})
+    a = om.add(
+        "tables",
+        "orders",
+        parent_fqn="bigquery.acme.marts",
+        description="Orders.",
+        databaseSchema={"id": sch["id"], "type": "databaseSchema"},
+        columns=[
+            {"name": "order_id", "fullyQualifiedName": "bigquery.acme.marts.orders.order_id", "dataType": "INT"},
+            {
+                "name": "address",
+                "fullyQualifiedName": "bigquery.acme.marts.orders.address",
+                "dataType": "STRUCT",
+                "children": [{"name": "city", "fullyQualifiedName": "bigquery.acme.marts.orders.address.city", "dataType": "STRING"}],
+            },
+        ],
+    )
     b = om.add("tables", "daily", parent_fqn="bigquery.acme.marts", description="Daily.", databaseSchema={"id": sch["id"], "type": "databaseSchema"})
     om.edges[(a["id"], b["id"])] = {"sqlQuery": "select * from orders", "source": "QueryLineage", "columnsLineage": [{"fromColumns": ["x.a"], "toColumn": "y.a"}]}
     user = om.add("users", "ada.park", email="ada@example.com", authenticationMechanism={"authType": "JWT", "config": {"JWTToken": "eyJ.secret"}})
