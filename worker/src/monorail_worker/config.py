@@ -45,6 +45,14 @@ class Settings:
     team_user: str = "admin"  # identity the `echo`/`resync` CLI sends with TEAM_AUTH=local
     # Send om requests as the person (OpenMetadata's X-Impersonate-User); needs a bot token with allowImpersonation.
     impersonate: bool = False
+    # Vertex AI successor jobs (vertex.py).
+    vertex_successor: bool = False
+    vertex_project: str = ""
+    vertex_region: str = ""
+    vertex_job_spec: str = ""  # a CustomJob as JSON, inline or a file path
+    vertex_max_runtime_hours: float = 168
+    vertex_lead_minutes: float = 60
+    vertex_stop_minutes: float = 5
 
     @staticmethod
     def load(env: dict[str, str] | None = None, dotenv_path: Path | None = None) -> "Settings":
@@ -63,6 +71,13 @@ class Settings:
         auth = get("TEAM_AUTH", "local").lower()
         if auth not in ("local", "google"):
             raise ValueError(f"TEAM_AUTH must be local or google (got {auth!r})")
+        vertex = _bool(get("TEAM_VERTEX_SUCCESSOR", "false"))
+        vertex_project = get("TEAM_VERTEX_PROJECT", get("GOOGLE_CLOUD_PROJECT"))
+        if vertex:
+            need = {"TEAM_VERTEX_PROJECT": vertex_project, "TEAM_VERTEX_REGION": get("TEAM_VERTEX_REGION"), "TEAM_VERTEX_JOB_SPEC": get("TEAM_VERTEX_JOB_SPEC")}
+            missing = [n for n, v in need.items() if not v]
+            if missing:
+                raise ValueError(f"TEAM_VERTEX_SUCCESSOR=true needs {', '.join(missing)}")
         return Settings(
             team_bucket=bucket,
             om_url=get("OM_URL").rstrip("/"),
@@ -82,4 +97,11 @@ class Settings:
             worker_id=get("TEAM_WORKER_ID"),
             team_user=get("TEAM_USER", "admin"),
             impersonate=_bool(get("TEAM_IMPERSONATE", "false")),
+            vertex_successor=vertex,
+            vertex_project=vertex_project,
+            vertex_region=get("TEAM_VERTEX_REGION"),
+            vertex_job_spec=get("TEAM_VERTEX_JOB_SPEC"),
+            vertex_max_runtime_hours=float(get("TEAM_VERTEX_MAX_RUNTIME_HOURS", "168")),
+            vertex_lead_minutes=float(get("TEAM_VERTEX_LEAD_MINUTES", "60")),
+            vertex_stop_minutes=float(get("TEAM_VERTEX_STOP_MINUTES", "5")),
         )

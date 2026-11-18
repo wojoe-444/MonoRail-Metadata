@@ -15,7 +15,7 @@
     "dev:api": "node --watch --import tsx server/index.ts",
     "start": "tsx server/index.ts",
     "worker": "uv run --project worker monorail-worker",
-    "worker:test": "uv run --project worker pytest worker/tests",
+    "worker:test": "uv run --project worker --extra vertex pytest worker/tests",
     "team:echo": "uv run --project worker monorail-worker echo"
   },
   "dependencies": {

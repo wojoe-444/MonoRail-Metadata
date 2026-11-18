@@ -16,6 +16,11 @@ dependencies = [
 [project.scripts]
 monorail-worker = "monorail_worker.cli:main"
 
+[project.optional-dependencies]
+vertex = [
+    "google-cloud-aiplatform>=1.60",
+]
+
 [dependency-groups]
 dev = ["pytest>=8.2"]
 

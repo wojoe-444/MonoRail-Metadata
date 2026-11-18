@@ -43,6 +43,7 @@ from .storage import Storage, dumps, read_json, write_json
 from .touched import FieldsPolicy, NeedResync, materialize, resolve
 from .ulid import floor_ulid, is_ulid, now_ms, ulid_time
 from .users import Directory
+from .vertex import Successor
 
 log = logging.getLogger(__name__)
 
@@ -63,6 +64,7 @@ class Worker:
         audit: AuditSink | None = None,
         clock: Callable[[], int] = now_ms,
         worker_id: str | None = None,
+        successor: Successor | None = None,
     ):
         self.settings = settings
         self.storage = storage
@@ -77,6 +79,8 @@ class Worker:
         self.fields = FieldsPolicy()
         self.self_writes = SelfWrites()
         self.users = Directory()
+        self.successor = successor or Successor(settings, started_at=clock())
+        self.stopping = False
         self._om_version_at = 0
         self.cursor: dict[str, Any] = {}
         self.events: EventCursor | None = None
@@ -456,6 +460,14 @@ class Worker:
     # ---------- loop ----------
     def run_once(self) -> None:
         self.refresh_om_version()
+        if self.successor.enabled:
+            step = self.successor.tick(self.clock(), leader=self.lease.held and self.leading, cursor=self.cursor, worker_id=self.worker_id)
+            if step == "submitted":
+                self._save_cursor()
+            elif step == "stop":
+                log.warning("this job reaches its maximum runtime soon: handing over to the successor and stopping")
+                self.stopping = True
+                return
         if not self.lease.held:
             if self.leading:
                 log.warning("%s lost the lease", self.worker_id)
@@ -506,6 +518,8 @@ class Worker:
                 except Exception:
                     log.exception("worker loop error")
                     time.sleep(2)
+                if self.stopping:
+                    break
                 stop.wait(self.settings.poll_seconds)
         finally:
             live.stop()
