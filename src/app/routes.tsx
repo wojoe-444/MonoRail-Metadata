@@ -15,32 +15,52 @@ import {
   Tags,
   Users,
 } from 'lucide-react'
+import { lazy, Suspense, type ComponentType } from 'react'
 
 import type { NavSection } from '@/components/layout/nav'
+import { LoadingState } from '@/features/om/components/States'
 import { DataProductPage } from '@/pages/DataProductPage'
-import { DataQualityPage } from '@/pages/DataQualityPage'
 import { DomainsPage } from '@/pages/DomainsPage'
 import { ExplorePage } from '@/pages/ExplorePage'
 import { GlossaryPage } from '@/pages/GlossaryPage'
 import { GlossaryTermPage } from '@/pages/GlossaryTermPage'
 import { HomePage } from '@/pages/HomePage'
 import { IngestionPipelinePage } from '@/pages/IngestionPipelinePage'
-import { InsightsPage } from '@/pages/InsightsPage'
-import { LineagePage } from '@/pages/LineagePage'
 import { MalloyModelsPage } from '@/pages/MalloyModelsPage'
-import { MalloyWorkbenchPage } from '@/pages/MalloyWorkbenchPage'
 import { MetricsPage } from '@/pages/MetricsPage'
-import { QueryBuilderPage } from '@/pages/QueryBuilderPage'
 import { SemanticModelsPage } from '@/pages/SemanticModelsPage'
-import { SemanticSourcePage } from '@/pages/SemanticSourcePage'
 import { ServiceBrowsePage } from '@/pages/ServiceBrowsePage'
 import { ServicesPage } from '@/pages/ServicesPage'
 import { SettingsPage } from '@/pages/SettingsPage'
-import { TablePage } from '@/pages/TablePage'
 import { TagsPage } from '@/pages/TagsPage'
 import { TeamsPage } from '@/pages/TeamsPage'
-import { TestCasePage } from '@/pages/TestCasePage'
 import { UserPage } from '@/pages/UserPage'
+
+/**
+ * A page that loads on first visit, as its own chunk, with a spinner meanwhile. For pages that
+ * pull in heavy libraries (charts, the graph canvas, the Malloy editor), so the first load doesn't
+ * carry them.
+ */
+function lazyPage(load: () => Promise<ComponentType>): ComponentType {
+  const Page = lazy(async () => ({ default: await load() }))
+  return function LazyPage() {
+    return (
+      <Suspense fallback={<LoadingState label="Loading page…" />}>
+        <Page />
+      </Suspense>
+    )
+  }
+}
+
+// Heavy pages: recharts (profiler, quality, Malloy results), @xyflow/react (lineage, join graph).
+const DataQualityPage = lazyPage(() => import('@/pages/DataQualityPage').then((m) => m.DataQualityPage))
+const InsightsPage = lazyPage(() => import('@/pages/InsightsPage').then((m) => m.InsightsPage))
+const LineagePage = lazyPage(() => import('@/pages/LineagePage').then((m) => m.LineagePage))
+const MalloyWorkbenchPage = lazyPage(() => import('@/pages/MalloyWorkbenchPage').then((m) => m.MalloyWorkbenchPage))
+const QueryBuilderPage = lazyPage(() => import('@/pages/QueryBuilderPage').then((m) => m.QueryBuilderPage))
+const SemanticSourcePage = lazyPage(() => import('@/pages/SemanticSourcePage').then((m) => m.SemanticSourcePage))
+const TablePage = lazyPage(() => import('@/pages/TablePage').then((m) => m.TablePage))
+const TestCasePage = lazyPage(() => import('@/pages/TestCasePage').then((m) => m.TestCasePage))
 
 /**
  * Every page in the app, in drawer order. This is the one place to add a
@@ -51,6 +71,8 @@ import { UserPage } from '@/pages/UserPage'
  * - `layout: 'full'` drops the page padding and max width (canvases, editors, maps).
  * - `hidden: true` keeps a route out of the drawer (detail pages, wizards).
  * - The `pinned` section sits at the bottom of the drawer (Settings).
+ *
+ * - Wrap a heavy page in `lazyPage()` above to load it on first visit.
  *
  * Entity links are built in one place, `entityPath()` in src/features/om/entity.ts.
  * Keep it in step when a detail page moves.

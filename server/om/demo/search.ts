@@ -44,7 +44,8 @@ function toDoc({ entity, collection }: { entity: Entity; collection: Collection 
     ...entity,
     entityType: collection.entityType,
     tier,
-    tags: [...merged.values()].filter((t: Entity) => !String(t.tagFQN).startsWith('Tier.')),
+    // Tier and certification have their own fields in the index, as in 2.x.
+    tags: [...merged.values()].filter((t: Entity) => !/^(Tier|Certification)\./.test(String(t.tagFQN))),
     // Search docs carry the tags of columns too, so a column tag finds its table.
     columnNames: entity.columns?.map((col: Entity) => col.name),
     // Index-only fields OpenMetadata's SearchIndex adds (Insights reads them).
@@ -55,7 +56,7 @@ function toDoc({ entity, collection }: { entity: Entity; collection: Collection 
   return { entity, collection, source }
 }
 
-/** OpenMetadata 2.x keeps certification in its own field; the demo keeps it as a Certification.* tag. */
+/** Fallback for entities that still carry certification as a Certification.* tag (data from before 2.x). */
 function certificationOf(tags: Entity[] | undefined) {
   const tag = (tags ?? []).find((t: Entity) => String(t.tagFQN).startsWith('Certification.'))
   return tag ? { tagLabel: tag } : undefined

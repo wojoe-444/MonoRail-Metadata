@@ -20,13 +20,30 @@ Open http://localhost:5173. With no configuration it runs on the **demo catalog*
 
 To use a real OpenMetadata, start it from [`deploy/openmetadata`](deploy/openmetadata/README.md), set `OM_URL` in `.env` (copy `.env.example`), and optionally `npm run seed:om` to fill it with the same sample content. To run Malloy queries, set `BQ_PROJECT_ID` and sign in with `gcloud auth application-default login`.
 
+## Running it for a team
+
+For a team with Google sign-in, a GCS bucket, a BigQuery dataset and one long-running Python job, but no server people can reach, the app runs on each person's machine and shares one backend through the bucket ([docs/team-backend.md](docs/team-backend.md)):
+
+- A **worker** (`worker/`, Python) is the only thing that talks to OpenMetadata. It publishes a snapshot of the catalog and a change feed to the bucket, and applies everyone's changes from request files.
+- Each **app** (`APP_BACKEND=team`) loads the snapshot, follows the feed, answers reads from memory (entities, search, lineage, and each table's latest profile), and sends changes to the worker. Browsing keeps working when the worker is down; changes queue. A request the worker would refuse is refused by the app at once, from the same allowlist.
+- Every change records who made it: the worker maps the signed-in person to their OpenMetadata user (`byUser` in the feed and the audit table). With `TEAM_IMPERSONATE=true` and a bot created with `allowImpersonation`, OpenMetadata itself applies that person's permissions and shows them as `updatedBy`.
+
+For now everything can run on one machine, with a local folder as the bucket:
+
+```sh
+npm run worker                                 # the worker, next to a local OpenMetadata (deploy/openmetadata)
+APP_BACKEND=team npm run dev                   # the app, reading from the bucket folder (.team-bucket/)
+```
+
+`TEAM_BUCKET=gs://bucket/prefix` and `TEAM_AUTH=google` switch to Google Cloud Storage and Google sign-in. On Vertex AI, `TEAM_VERTEX_SUCCESSOR=true` has the worker start its own successor job before the job's maximum runtime ([worker/README.md](worker/README.md#vertex-ai-successor-jobs)).
+
 ## What's in it
 
 | Area | Pages |
 | --- | --- |
-| **Discover** | Home (search, catalog health, most used, following, recent changes). Explore (full-text search with facets for type, project, dataset, owner, domain, tier, tags; URL-addressable). Table pages with schema (nested columns, per-column descriptions and tags), lineage, profiler, data quality, Malloy, sample data, queries, view definition, conversations and version history. Full-screen lineage with manual edges. |
+| **Discover** | Home (search, catalog health, most used, following, recent changes). Explore (full-text search with facets for type, project, dataset, owner, domain, tier, certification, tags; URL-addressable). Table pages with schema (nested columns, per-column descriptions and tags), lineage, profiler, data quality, Malloy, sample data, queries, view definition, conversations and version history. Full-screen lineage with manual edges. |
 | **Semantic layer** | Semantic models: every Malloy source with its table, key and joins, each field's description, glossary term and definition, and a join graph that explains grain and fan-out. Metrics: every measure, searchable, by kind; publish them to the catalog. Query builder: measures, group-bys through joins with time grains, filters, prior period and running totals; shows the Malloy and SQL, dry-runs for cost, runs, saves as a view. Malloy models: list, workbench (editor, live outline, query runner with charts and SQL), and each table's Malloy sources. Scaffold a source from any table. |
-| **Govern** | Glossary and terms, classifications and tags, domains and data products. Owners, tiers, certification and tags editable on every asset. |
+| **Govern** | Glossary and terms, classifications and tags, domains and data products. Owners, tiers, certification and tags editable on every asset. Certification is OpenMetadata 2.x's own field (with its applied and expiry dates); older `Certification.*` tags are still read. |
 | **Observe** | Data quality (test cases, results, incidents, add tests from a table), insights (documentation, ownership, tier and PII coverage). |
 | **Administer** | Services (BigQuery connection, ingestion pipelines and runs), browse projects and datasets, teams and users, connection status in Settings. |
 
@@ -65,8 +82,9 @@ Malloy is the semantic layer: a source is a semantic model, a measure is a metri
 
 | Path | What it is |
 | --- | --- |
-| `src/` | The UI. Pages in `src/pages`, registered in `src/app/routes.tsx`; feature code in `src/features/<feature>`; OpenMetadata client and shared entity components in `src/features/om`. |
-| `server/` | The app server: OpenMetadata pass-through with server-held credentials (`om/client.ts`), the demo catalog (`om/demo/`), Malloy (`malloy/`). |
+| `src/` | The UI. Pages in `src/pages`, registered in `src/app/routes.tsx` (heavy pages through `lazyPage()`, so they load on first visit); feature code in `src/features/<feature>`; OpenMetadata client and shared entity components in `src/features/om`. |
+| `server/` | The app server: OpenMetadata pass-through with server-held credentials (`om/client.ts`), the demo catalog (`om/demo/`), the team backend's app side (`team/`), Malloy (`malloy/`). |
+| `worker/` | The team backend's worker (Python). See [worker/README.md](worker/README.md). |
 | `malloy/` | Malloy models. |
 | `deploy/openmetadata/` | OpenMetadata 2.0.8 Docker Compose and BigQuery ingestion workflows. |
 | `docs/` | Roadmap and design notes. |
@@ -83,6 +101,7 @@ Malloy is the semantic layer: a source is a semantic model, a measure is a metri
 | `npm run build` | Typecheck, then build the UI to `dist/`. |
 | `npm start` | The server, which also serves `dist/`. One process for production. |
 | `npm run seed:om` | Load the demo catalog into the OpenMetadata at `OM_URL` (for a local or test server). |
+| `npm run worker` / `npm run worker:test` | The team-backend worker, and its tests (pytest, with the `vertex` extra). |
 | `npm run ui:add -- <name>` | Add a shadcn/ui component wired to the theme. |
 
 ## Licenses

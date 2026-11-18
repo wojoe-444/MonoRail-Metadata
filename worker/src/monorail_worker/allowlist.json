@@ -1,0 +1,25 @@
+{
+  "$comment": "The om allowlist (docs/team-backend.md, \"Allowlist\"). One definition, read by the worker (allowlist.py) and by the app (server/team/allowlist.ts), which checks requests before queueing them. tests/test_allowlist.py runs the same cases through both.",
+  "getDeny": ["/bots", "/system/settings", "/users/generateToken", "/users/token", "/users/auth-mechanism"],
+  "writeCollections": [
+    "tables",
+    "databases",
+    "databaseSchemas",
+    "glossaries",
+    "glossaryTerms",
+    "classifications",
+    "tags",
+    "domains",
+    "dataProducts",
+    "metrics",
+    "queries",
+    "teams",
+    "dataQuality",
+    "services/ingestionPipelines",
+    "lineage",
+    "feed",
+    "usage"
+  ],
+  "writeSubresources": ["followers", "votes"],
+  "passHeaders": ["content-type"]
+}

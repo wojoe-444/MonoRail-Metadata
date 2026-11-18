@@ -1,0 +1,70 @@
+"""Which `om` requests the worker will make (docs/team-backend.md, "Allowlist").
+
+The lists live in `allowlist.json`, which the app reads too (server/team/allowlist.ts) so it can
+refuse a request before queueing it, with the same status and message. The logic here and there
+must match; tests/test_allowlist.py runs the same cases through both.
+"""
+
+from __future__ import annotations
+
+import json
+from importlib import resources
+from urllib.parse import unquote
+
+RULES = json.loads(resources.files(__package__).joinpath("allowlist.json").read_text(encoding="utf-8"))
+
+WRITE_METHODS = {"PUT", "POST", "PATCH", "DELETE"}
+METHODS = WRITE_METHODS | {"GET"}
+
+# GET is allowed on everything except these (and anything under them).
+GET_DENY: tuple[str, ...] = tuple(RULES["getDeny"])
+# Writes are allowed on these collections and anything under them...
+WRITE_COLLECTIONS: tuple[str, ...] = tuple(RULES["writeCollections"])
+# ...and on these sub-resources of any entity: /{collection}/{id}/followers[/{userId}], /{collection}/{id}/votes.
+WRITE_SUBRESOURCES: tuple[str, ...] = tuple(RULES["writeSubresources"])
+# Request headers passed through to OpenMetadata (lower case).
+PASS_HEADERS: frozenset[str] = frozenset(RULES["passHeaders"])
+
+
+def normalize(path: str) -> str | None:
+    """A clean `/a/b` path, or None if it tries anything odd (traversal, a full URL, a query)."""
+    if not isinstance(path, str) or not path.startswith("/") or "?" in path or "#" in path or "\\" in path:
+        return None
+    if "://" in path or path.startswith("//"):
+        return None
+    segs = path.split("/")[1:]
+    if any(unquote(s) in (".", "..") for s in segs):
+        return None
+    if path.startswith("/api/"):
+        return None  # paths are relative to /api/v1
+    return "/" + "/".join(s for s in segs if s != "")
+
+
+def _under(path: str, prefix: str) -> bool:
+    return path == prefix or path.startswith(prefix + "/")
+
+
+def check(method: str | None, path: str | None) -> tuple[bool, str]:
+    """(allowed, reason)."""
+    if not method or method not in METHODS:
+        return False, f"Method {method!r} is not allowed."
+    norm = normalize(path or "")
+    if norm is None:
+        return False, f"Path {path!r} is not a plain OpenMetadata path."
+    low = norm.lower()
+    if method == "GET":
+        for deny in GET_DENY:
+            if _under(low, deny.lower()):
+                return False, f"GET {deny} is not available through the team backend."
+        return True, ""
+    for coll in WRITE_COLLECTIONS:
+        if _under(norm, "/" + coll):
+            return True, ""
+    segs = norm.split("/")[1:]
+    # /{collection...}/{id}/followers[/{userId}] or /{collection...}/{id}/votes
+    for i, s in enumerate(segs):
+        if s in WRITE_SUBRESOURCES and i >= 2 and len(segs) - i <= 2:
+            if s == "votes" and len(segs) - i != 1:
+                continue
+            return True, ""
+    return False, f"{method} {norm} is not allowed through the team backend."

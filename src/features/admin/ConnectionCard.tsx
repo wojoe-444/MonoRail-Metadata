@@ -9,6 +9,7 @@ import { useQuery } from '@/hooks/useQuery'
 import { getHealth } from '@/features/om/api'
 import { formatBytes } from '@/features/om/entity'
 import { ErrorState, LoadingState } from '@/features/om/components/States'
+import { TeamRow } from '@/features/team/TeamRow'
 
 /** What the app server is connected to (GET /api/health), with what to set to change it. */
 export function ConnectionCard() {
@@ -38,38 +39,52 @@ export function ConnectionCard() {
           <LoadingState />
         ) : (
           <div className="flex flex-col divide-y">
+            {h.team && (
+              <div className="flex flex-col gap-3 pb-4">
+                <span className="text-sm font-medium">Team backend</span>
+                <TeamRow team={h.team} />
+              </div>
+            )}
             <Row
               title="OpenMetadata"
               status={
                 h.mode === 'demo' ? (
                   <Badge variant="info">Demo catalog</Badge>
+                ) : h.mode === 'team' ? (
+                  <Badge variant="outline">Through the team worker</Badge>
                 ) : h.openmetadata.ok ? (
                   <Badge variant="success">Connected</Badge>
                 ) : (
                   <Badge variant="destructive">Unreachable</Badge>
                 )
               }
-              ok={h.mode === 'demo' || h.openmetadata.ok}
+              ok={h.mode !== 'openmetadata' || h.openmetadata.ok}
               facts={
                 h.mode === 'demo'
                   ? [
                       ['Mode', 'In-memory demo, edits last until restart'],
                       ['API version', h.openmetadata.version ?? '–'],
                     ]
-                  : [
-                      ['URL', h.openmetadata.url ?? '–', true],
-                      ['Version', h.openmetadata.version ?? '–'],
-                      ['BigQuery service', h.openmetadata.service, true],
-                    ]
+                  : h.mode === 'team'
+                    ? [
+                        ['Version', h.openmetadata.version ?? '–'],
+                        ['BigQuery service', h.openmetadata.service, true],
+                        ['Reached by', 'The worker only'],
+                      ]
+                    : [
+                        ['URL', h.openmetadata.url ?? '–', true],
+                        ['Version', h.openmetadata.version ?? '–'],
+                        ['BigQuery service', h.openmetadata.service, true],
+                      ]
               }
-              error={h.mode !== 'demo' && !h.openmetadata.ok ? h.openmetadata.error : undefined}
+              error={h.mode === 'openmetadata' && !h.openmetadata.ok ? h.openmetadata.error : undefined}
               hint={
                 h.mode === 'demo' ? (
                   <>
                     Set <Code>OM_URL</Code> (e.g. http://localhost:8585) and <Code>OM_TOKEN</Code>, a bot JWT from OpenMetadata's Settings ›
                     Bots, to use a real server. <Code>OM_BIGQUERY_SERVICE</Code> names the BigQuery service.
                   </>
-                ) : !h.openmetadata.ok ? (
+                ) : h.mode === 'openmetadata' && !h.openmetadata.ok ? (
                   <>
                     Check that OpenMetadata is up at that URL and that <Code>OM_TOKEN</Code> (or <Code>OM_EMAIL</Code> /{' '}
                     <Code>OM_PASSWORD</Code>) is valid.

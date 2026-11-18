@@ -28,7 +28,7 @@ How OpenMetadata's features map to this app, and what comes next. "Backend" mean
 | Alerts and notifications | Not yet | Backend has event subscriptions (Slack, email, webhooks). |
 | Auto-classification (PII detection) | Pipeline type only | Review queue for suggested tags is next. |
 | dbt ingestion | Pipeline type only | Shows dbt model SQL and tests as lineage and quality once run. |
-| SSO and per-user identity | Not yet | Today the server acts as one bot. See "Identity" below. |
+| SSO and per-user identity | Partly (team backend) | The team backend signs people in with Google, attributes every change to their OpenMetadata user, and can act as them through OpenMetadata's bot impersonation (`TEAM_IMPERSONATE`). Direct mode still acts as one bot. See "Identity" below. |
 | Dashboards, pipelines, topics, ML models | Not in scope yet | BigQuery-first. Looker or Airflow services are the likely next ones. |
 
 ## Ours: Malloy and beyond
@@ -58,7 +58,9 @@ Next, roughly in order:
 
 ## Identity
 
-The server holds one OpenMetadata credential (a bot token), so every edit is attributed to that bot. Next step: sign people in with Google (the same identity BigQuery uses), have OpenMetadata trust the same provider, and forward each person's token from the server so OpenMetadata's roles and audit trail apply per person. BigQuery queries can run as the person too (OAuth with the BigQuery scope) instead of the server's service account.
+In direct mode the server holds one OpenMetadata credential (a bot token), so every edit is attributed to that bot.
+
+The team backend ([team-backend.md](team-backend.md)) signs each person in with Google and the worker verifies the ID token (written to Google's documented endpoints; not yet run against a real OAuth client). It maps the person to their OpenMetadata user and records `byUser` in replies, the feed and the BigQuery audit table. OpenMetadata 2.0.8 supports a bot acting for a user: a bot created with `allowImpersonation: true` (admin only) and a role granting `Impersonate` sends `X-Impersonate-User`, and OpenMetadata applies that user's permissions and stores them as `updatedBy`, with the bot as `impersonatedBy`. Credential, bot, policy and role endpoints refuse impersonated requests. The worker uses this with `TEAM_IMPERSONATE=true` (checked against the local server). Next: the same for direct mode, either through the same bot or by having OpenMetadata trust Google sign-in and forwarding each person's token. BigQuery queries already run as the person in team mode.
 
 ## Deployment
 
@@ -68,7 +70,7 @@ Today: OpenMetadata via its Docker Compose, the app as one Node process (`npm ru
 
 Checked on a local OpenMetadata 2.0.8 (seeded with `npm run seed:om`): every list, detail, profile, lineage, query, test and pipeline call the pages make answers 200. Fixed from that run: aggregation keys are renamed by the server (`sterms#ownerDisplayName`), lineage nodes are keyed by FQN and edge SQL can be a `sqlQueryKey`, and feed posts take the author from the token (a `from` field is rejected). Still to confirm in the browser and with real ingestion:
 
-- **Certification.** 2.x stores it in a separate `certification` field. The app currently treats it as a `Certification.*` tag (Insights counts both). Move the header editor to the real field.
+- **Certification.** Done: the header editor, badges, search results, the Explore facet and Insights use 2.x's `certification` field, falling back to `Certification.*` tags. The PATCH was checked against the local server: it sets `appliedDate` and `expiryDate` itself (30 days by default, from the certification settings). 2.x silently drops `Certification.*` tags sent in `tags`, which is why earlier tag-based edits didn't stick.
 - **Search field names.** Facets and counts use `owners.displayName.keyword`, `domains.fullyQualifiedName`, `certification.tagLabel.tagFQN`, `service.name(.keyword)`, `database.fullyQualifiedName(.keyword)`. Followed assets match `followers` (real index) or `followers.id` (demo).
 - **Incidents.** Acknowledge, assign and resolve POST a resolution status; 2.0.8 may expect its task-based transitions instead.
 - **Ingestion.** Trigger, deploy and kill return a runner response, not the pipeline. "Test connection" (`/automations/workflows`) isn't built.
@@ -77,4 +79,4 @@ Checked on a local OpenMetadata 2.0.8 (seeded with `npm run seed:om`): every lis
 
 ## Housekeeping
 
-- The UI ships as one 1.6 MB script. Lazy-load the heavy pages (workbench, lineage, chart pages) when it starts to matter.
+- Done: the heavy pages (table, lineage, quality, test case, insights, query builder, semantic source, Malloy workbench) load on first visit. The entry script went from 1.65 MB to 678 KB; recharts and @xyflow/react are separate chunks. The entry still carries React, Radix and react-markdown; splitting further would mean lazy-loading markdown rendering.

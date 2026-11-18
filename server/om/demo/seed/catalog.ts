@@ -1,4 +1,4 @@
-import { fqn, ref, store, tagLabel, type Entity } from '../store'
+import { certified, fqn, ref, store, tagLabel, type Entity } from '../store'
 import { domainRef, ownerRef, seedDataProducts, userRef } from './governance'
 import { DAY, rng, today } from './random'
 
@@ -705,7 +705,12 @@ export function seedCatalog() {
     const tableFqn = fqn(SERVICE, def.project, def.dataset, def.name)
     const db = databases.get(def.project)!
     const schema = schemas.get(def.dataset)!
-    const tags = [...(def.tags ?? []).map((t) => tagLabel(t)), ...(def.glossary ?? []).map((t) => tagLabel(t, 'Glossary'))]
+    // OpenMetadata 2.x keeps certification in its own field, not in tags.
+    const cert = def.tags?.find((t) => t.startsWith('Certification.'))
+    const tags = [
+      ...(def.tags ?? []).filter((t) => t !== cert).map((t) => tagLabel(t)),
+      ...(def.glossary ?? []).map((t) => tagLabel(t, 'Glossary')),
+    ]
     const usage = def.usage ?? 0
     const sizeInByte = Math.round(def.rows * def.columns.length * 18)
     const table = store.add('tables', {
@@ -721,6 +726,7 @@ export function seedCatalog() {
       owners: def.owner ? [ownerRef(def.owner)] : [],
       domains: def.domain ? [domainRef(def.domain)] : [],
       tags,
+      certification: cert ? certified(tagLabel(cert), t0 - 3 * 86_400_000) : undefined,
       followers: usage > 200 ? [userRef('june.kim')] : [],
       schemaDefinition: def.sql,
       tablePartition: def.partition ? { columns: [{ columnName: def.partition, intervalType: 'TIME-UNIT', interval: 'DAY' }] } : undefined,

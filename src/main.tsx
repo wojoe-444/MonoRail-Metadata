@@ -8,9 +8,18 @@ import '@/lib/theme'
 import { NAV } from '@/app/routes'
 import { AppShell } from '@/components/layout/AppShell'
 import { GlobalSearch } from '@/features/explore/GlobalSearch'
+import { BackendStatus } from '@/features/team/BackendStatus'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AppShell sections={NAV} topBarActions={<GlobalSearch />} />
+    <AppShell
+      sections={NAV}
+      topBarActions={
+        <>
+          <BackendStatus />
+          <GlobalSearch />
+        </>
+      }
+    />
   </StrictMode>,
 )

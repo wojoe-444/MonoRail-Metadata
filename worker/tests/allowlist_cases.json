@@ -1,0 +1,347 @@
+[
+ {
+  "method": "GET",
+  "path": "/tables",
+  "allowed": true
+ },
+ {
+  "method": "GET",
+  "path": "/tables/0a51e62b-5121-48a5-8aa6-86888b01be67",
+  "allowed": true
+ },
+ {
+  "method": "GET",
+  "path": "/tables/name/bigquery.acme.marts.orders",
+  "allowed": true
+ },
+ {
+  "method": "GET",
+  "path": "/users/name/ada.park",
+  "allowed": true
+ },
+ {
+  "method": "GET",
+  "path": "/search/query",
+  "allowed": true
+ },
+ {
+  "method": "GET",
+  "path": "/system/version",
+  "allowed": true
+ },
+ {
+  "method": "GET",
+  "path": "/tables//x/",
+  "allowed": true
+ },
+ {
+  "method": "PATCH",
+  "path": "/tables/0a51e62b-5121-48a5-8aa6-86888b01be67",
+  "allowed": true
+ },
+ {
+  "method": "PUT",
+  "path": "/tables",
+  "allowed": true
+ },
+ {
+  "method": "DELETE",
+  "path": "/tables/0a51e62b-5121-48a5-8aa6-86888b01be67",
+  "allowed": true
+ },
+ {
+  "method": "PUT",
+  "path": "/glossaryTerms",
+  "allowed": true
+ },
+ {
+  "method": "PATCH",
+  "path": "/dataQuality/testCases/7f517ae8-6d8e-446d-83fc-05f88a445bd4",
+  "allowed": true
+ },
+ {
+  "method": "POST",
+  "path": "/dataQuality/testCases/testCaseResults/a.b.c",
+  "allowed": true
+ },
+ {
+  "method": "PUT",
+  "path": "/services/ingestionPipelines",
+  "allowed": true
+ },
+ {
+  "method": "POST",
+  "path": "/services/ingestionPipelines/trigger/7f517ae8-6d8e-446d-83fc-05f88a445bd4",
+  "allowed": true
+ },
+ {
+  "method": "PUT",
+  "path": "/lineage",
+  "allowed": true
+ },
+ {
+  "method": "DELETE",
+  "path": "/lineage/table/7f517ae8-6d8e-446d-83fc-05f88a445bd4/table/7f517ae8-6d8e-446d-83fc-05f88a445bd4",
+  "allowed": true
+ },
+ {
+  "method": "POST",
+  "path": "/feed",
+  "allowed": true
+ },
+ {
+  "method": "POST",
+  "path": "/feed/7f517ae8-6d8e-446d-83fc-05f88a445bd4/posts",
+  "allowed": true
+ },
+ {
+  "method": "POST",
+  "path": "/usage/table/7f517ae8-6d8e-446d-83fc-05f88a445bd4",
+  "allowed": true
+ },
+ {
+  "method": "PUT",
+  "path": "/tables/0a51e62b-5121-48a5-8aa6-86888b01be67/followers",
+  "allowed": true
+ },
+ {
+  "method": "DELETE",
+  "path": "/tables/0a51e62b-5121-48a5-8aa6-86888b01be67/followers/7f517ae8-6d8e-446d-83fc-05f88a445bd4",
+  "allowed": true
+ },
+ {
+  "method": "PUT",
+  "path": "/services/databaseServices/7f517ae8-6d8e-446d-83fc-05f88a445bd4/followers",
+  "allowed": true
+ },
+ {
+  "method": "PUT",
+  "path": "/tables/0a51e62b-5121-48a5-8aa6-86888b01be67/votes",
+  "allowed": true
+ },
+ {
+  "method": "PUT",
+  "path": "/dataProducts/revenue/assets/add",
+  "allowed": true
+ },
+ {
+  "method": "PUT",
+  "path": "/teams",
+  "allowed": true
+ },
+ {
+  "method": "PUT",
+  "path": "/tables/0a51e62b-5121-48a5-8aa6-86888b01be67/tableProfile",
+  "allowed": true
+ },
+ {
+  "method": "DELETE",
+  "path": "/tables/a.b.c.d/table/1794961619156/profile",
+  "allowed": true
+ },
+ {
+  "method": "GET",
+  "path": "/bots",
+  "allowed": false
+ },
+ {
+  "method": "GET",
+  "path": "/bots/name/ingestion-bot",
+  "allowed": false
+ },
+ {
+  "method": "GET",
+  "path": "/system/settings",
+  "allowed": false
+ },
+ {
+  "method": "GET",
+  "path": "/system/settings/emailConfiguration",
+  "allowed": false
+ },
+ {
+  "method": "GET",
+  "path": "/users/token/7f517ae8-6d8e-446d-83fc-05f88a445bd4",
+  "allowed": false
+ },
+ {
+  "method": "GET",
+  "path": "/users/generateToken/7f517ae8-6d8e-446d-83fc-05f88a445bd4",
+  "allowed": false
+ },
+ {
+  "method": "GET",
+  "path": "/users/auth-mechanism/7f517ae8-6d8e-446d-83fc-05f88a445bd4",
+  "allowed": false
+ },
+ {
+  "method": "GET",
+  "path": "/USERS/TOKEN/7f517ae8-6d8e-446d-83fc-05f88a445bd4",
+  "allowed": false
+ },
+ {
+  "method": "GET",
+  "path": "//bots",
+  "allowed": false
+ },
+ {
+  "method": "PUT",
+  "path": "/users",
+  "allowed": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/users/7f517ae8-6d8e-446d-83fc-05f88a445bd4",
+  "allowed": false
+ },
+ {
+  "method": "PUT",
+  "path": "/users/generateToken/7f517ae8-6d8e-446d-83fc-05f88a445bd4",
+  "allowed": false
+ },
+ {
+  "method": "PUT",
+  "path": "/services/databaseServices",
+  "allowed": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/services/databaseServices/7f517ae8-6d8e-446d-83fc-05f88a445bd4",
+  "allowed": false
+ },
+ {
+  "method": "POST",
+  "path": "/bots",
+  "allowed": false
+ },
+ {
+  "method": "PUT",
+  "path": "/roles",
+  "allowed": false
+ },
+ {
+  "method": "PUT",
+  "path": "/policies",
+  "allowed": false
+ },
+ {
+  "method": "PUT",
+  "path": "/system/settings",
+  "allowed": false
+ },
+ {
+  "method": "PUT",
+  "path": "/followers",
+  "allowed": false
+ },
+ {
+  "method": "PUT",
+  "path": "/users/7f517ae8-6d8e-446d-83fc-05f88a445bd4/votes/7f517ae8-6d8e-446d-83fc-05f88a445bd4",
+  "allowed": false
+ },
+ {
+  "method": "PUT",
+  "path": "/tablesx",
+  "allowed": false
+ },
+ {
+  "method": "HEAD",
+  "path": "/tables/0a51e62b-5121-48a5-8aa6-86888b01be67",
+  "allowed": false
+ },
+ {
+  "method": "TRACE",
+  "path": "/tables/0a51e62b-5121-48a5-8aa6-86888b01be67",
+  "allowed": false
+ },
+ {
+  "method": "get",
+  "path": "/tables/0a51e62b-5121-48a5-8aa6-86888b01be67",
+  "allowed": false
+ },
+ {
+  "method": "GET",
+  "path": "/tables/../bots",
+  "allowed": false
+ },
+ {
+  "method": "GET",
+  "path": "/tables/%2e%2e/bots",
+  "allowed": false
+ },
+ {
+  "method": "GET",
+  "path": "/tables/%2E./bots",
+  "allowed": false
+ },
+ {
+  "method": "GET",
+  "path": "tables",
+  "allowed": false
+ },
+ {
+  "method": "GET",
+  "path": "",
+  "allowed": false
+ },
+ {
+  "method": "GET",
+  "path": null,
+  "allowed": false
+ },
+ {
+  "method": "GET",
+  "path": "//evil.example/x",
+  "allowed": false
+ },
+ {
+  "method": "GET",
+  "path": "http://evil.example/api/v1/tables",
+  "allowed": false
+ },
+ {
+  "method": "GET",
+  "path": "/tables?fields=*",
+  "allowed": false
+ },
+ {
+  "method": "GET",
+  "path": "/tables#x",
+  "allowed": false
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/tables",
+  "allowed": false
+ },
+ {
+  "method": "GET",
+  "path": "/tables\\x",
+  "allowed": false
+ },
+ {
+  "method": "GET",
+  "path": "it's\\a\n\"path\"\t\u0001",
+  "allowed": false
+ },
+ {
+  "method": "GET",
+  "path": "it's",
+  "allowed": false
+ },
+ {
+  "method": "PATCH",
+  "path": "/tâbles/ü",
+  "allowed": false
+ },
+ {
+  "method": null,
+  "path": "/tables/0a51e62b-5121-48a5-8aa6-86888b01be67",
+  "allowed": false
+ },
+ {
+  "method": "",
+  "path": "/tables/0a51e62b-5121-48a5-8aa6-86888b01be67",
+  "allowed": false
+ }
+]

@@ -183,7 +183,7 @@ export function filterQuery(filters: Record<string, string[]>, extra: object[] =
 // ---------- Tables ----------
 
 export const TABLE_FIELDS =
-  'columns,owners,tags,followers,domains,dataProducts,usageSummary,tableConstraints,schemaDefinition,extension,votes,lifeCycle'
+  'columns,owners,tags,certification,followers,domains,dataProducts,usageSummary,tableConstraints,schemaDefinition,extension,votes,lifeCycle'
 
 export function getTable(fqn: string): Promise<Table> {
   return getEntity<Table>('table', fqn, TABLE_FIELDS)
@@ -266,9 +266,26 @@ export function replyToThread(threadId: string, message: string): Promise<Thread
 
 // ---------- Server ----------
 
+/** Team backend state (APP_BACKEND=team; docs/team-backend.md). */
+export interface TeamStatus {
+  bucket: string
+  auth: 'local' | 'google'
+  identity: { kind: 'local' | 'google'; user?: string; signedIn: boolean }
+  replica: {
+    ready: boolean
+    seq: number
+    loadedAt: number | null
+    profiles?: boolean
+    counts: Record<string, number>
+    error: string | null
+  }
+  worker: { online: boolean; lastSeen: number | null; id?: string; version?: string; omVersion?: string; backlog?: number | null }
+}
+
 export interface Health {
-  mode: 'demo' | 'openmetadata'
+  mode: 'demo' | 'openmetadata' | 'team'
   openmetadata: { url: string | null; service: string; ok: boolean; version?: string; error?: string }
+  team?: TeamStatus | null
   bigquery: { configured: boolean; projectId: string | null; maxBytesBilled: number }
   malloy: { dir: string }
 }

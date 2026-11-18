@@ -24,7 +24,7 @@ export function SearchResult({ hit }: { hit: SearchSource }) {
             {displayName(hit)}
           </a>
           <TierBadge tier={hit.tier} />
-          <CertificationBadge tag={certificationOf(hit.tags)} />
+          <CertificationBadge certification={certificationOf(hit)} />
           {hit.tableType && hit.tableType !== 'Regular' && (
             <Badge variant="outline">{hit.tableType.replace(/([A-Z])/g, ' $1').trim()}</Badge>
           )}

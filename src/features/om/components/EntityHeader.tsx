@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 import { followEntity, unfollowEntity } from '../api'
-import { certificationOf, displayName, entityLabel, plainTags, refHref, tierOf } from '../entity'
+import { certificationOf, displayName, entityLabel, isCertification, plainTags, refHref, tierOf, withCertification } from '../entity'
 import type { EntityBase, EntityReference, TagLabel } from '../types'
 import { useCurrentUser } from '../useEntity'
 import { OwnerPickerDialog, SingleTagDialog, TagPickerDialog } from './Editors'
@@ -47,7 +47,7 @@ export function EntityHeader<T extends EntityBase>({
   const following = Boolean(me && entity.followers?.some((f) => f.id === me.id))
   const tags = entity.tags ?? []
   const tier = tierOf(tags)
-  const cert = certificationOf(tags)
+  const cert = certificationOf(entity)
 
   const setTags = async (next: TagLabel[]) => onSave?.({ ...entity, tags: next })
   const replaceIn = (prefix: string, t: TagLabel | undefined) =>
@@ -74,7 +74,7 @@ export function EntityHeader<T extends EntityBase>({
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="truncate text-2xl font-semibold tracking-tight">{displayName(entity)}</h1>
               <TierBadge tier={tier} />
-              <CertificationBadge tag={cert} />
+              <CertificationBadge certification={cert} />
               {badges}
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -132,7 +132,7 @@ export function EntityHeader<T extends EntityBase>({
           )}
           {fields.includes('certification') && (
             <Field label="Certification" onEdit={onSave && (() => setEditing('certification'))}>
-              {cert ? <CertificationBadge tag={cert} /> : <span className="text-sm text-muted-foreground">Not certified</span>}
+              {cert ? <CertificationBadge certification={cert} /> : <span className="text-sm text-muted-foreground">Not certified</span>}
             </Field>
           )}
           {fields.includes('domains') && (
@@ -171,15 +171,15 @@ export function EntityHeader<T extends EntityBase>({
             onOpenChange={(o) => !o && setEditing(null)}
             title="Certification"
             classification="Certification"
-            value={cert}
-            onSave={(t) => replaceIn('Certification.', t)}
+            value={cert?.tagLabel}
+            onSave={(t) => onSave(withCertification(entity, t))}
           />
           <TagPickerDialog
             open={editing === 'tags'}
             onOpenChange={(o) => !o && setEditing(null)}
             title="Tags and glossary terms"
             value={plainTags(tags)}
-            onSave={(next) => setTags([...tags.filter((t) => tierOf([t]) || certificationOf([t])), ...next])}
+            onSave={(next) => setTags([...tags.filter((t) => tierOf([t]) || isCertification(t)), ...next])}
           />
         </>
       )}
