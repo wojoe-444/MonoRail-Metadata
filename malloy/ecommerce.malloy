@@ -1,0 +1,192 @@
+// theLook eCommerce: the raw public dataset, modeled for exploration.
+// Table schemas come from the OpenMetadata catalog, so this compiles without
+// BigQuery credentials. Running a query needs them (see README).
+//
+// Conventions the app reads (Semantic models and Metrics pages):
+//   # Some text                     the field's description
+//   # Business.<Term>: some text    the glossary term it implements, plus a description
+// The metric kind (simple, filtered, ratio, derived) is read from the expression itself.
+
+# A customer account on the storefront, whether or not they have ordered.
+source: users is bigquery.table('bigquery-public-data.thelook_ecommerce.users') extend {
+  primary_key: id
+
+  # Business.Customer: number of customer accounts.
+  measure: user_count is count()
+
+  dimension:
+    # First and last name.
+    full_name is concat(first_name, ' ', last_name)
+    # Age in four bands.
+    age_group is
+      pick 'Under 25' when age < 25
+      pick '25 to 44' when age < 45
+      pick '45 to 64' when age < 65
+      else '65 and over'
+}
+
+# The product catalog: one row per product.
+source: products is bigquery.table('bigquery-public-data.thelook_ecommerce.products') extend {
+  primary_key: id
+
+  # Number of products in the catalog.
+  measure: product_count is count()
+
+  # Average list price. An average of a column, safe at any grain.
+  measure: average_retail_price is retail_price.avg()
+}
+
+# One row per item in an order. The main fact source for revenue.
+source: order_items is bigquery.table('bigquery-public-data.thelook_ecommerce.order_items') extend {
+  primary_key: id
+  join_one: users with user_id
+  join_one: products with product_id
+
+  dimension:
+    # True when the item was returned.
+    is_returned is returned_at is not null
+    # True when the item's order was cancelled.
+    is_cancelled is status = 'Cancelled'
+
+  measure:
+    // ---- Simple: one aggregate over a column ----
+    # Business.Order: distinct orders that contain these items.
+    order_count is count(order_id)
+    # Business.Order.Order Item: number of order items.
+    item_count is count()
+    # Sum of sale price over every item, cancelled and returned included.
+    total_sale_price is sale_price.sum()
+
+    // ---- Filtered: an aggregate with { where: }, defined once ----
+    # Business.Revenue.Gross Revenue: sale price of non-cancelled items, returns included.
+    gross_revenue is sale_price.sum() { where: not is_cancelled }
+    # Business.Revenue.Net Revenue: gross revenue minus returned items.
+    net_revenue is sale_price.sum() { where: not is_cancelled and not is_returned }
+    # Items returned by the customer.
+    returned_item_count is count() { where: is_returned }
+
+    // ---- Derived: arithmetic over other measures ----
+    # Net revenue minus the cost of the items sold. products.cost is summed through join_one: products.
+    gross_margin is net_revenue - products.cost.sum() { where: not is_cancelled and not is_returned }
+
+    // ---- Ratio: computed from the sums at the query's grain, never an average of averages ----
+    # Business.Gross Margin: gross margin over net revenue.
+    gross_margin_rate is gross_margin / nullif(net_revenue, 0)
+    # Business.Return Rate: returned items over delivered items.
+    return_rate is count() { where: is_returned } / nullif(count() { where: delivered_at is not null }, 0)
+    # Gross revenue per order. Quarterly AOV divides quarterly sums, not monthly AOVs.
+    average_order_value is gross_revenue / nullif(order_count, 0)
+
+    // ---- Across a join: symmetric aggregates count each customer once ----
+    # Distinct customers who bought these items. users is joined once per item, so a plain count would repeat customers; Malloy counts users.id once.
+    customer_count is users.count()
+    # Net revenue per buying customer.
+    revenue_per_customer is net_revenue / nullif(users.count(), 0)
+
+  # Orders, revenue and net revenue by month.
+  view: by_month is {
+    group_by: order_month is created_at.month
+    aggregate: order_count, gross_revenue, net_revenue
+    order_by: order_month
+  }
+
+  # The ten categories with the most net revenue.
+  view: top_categories is {
+    group_by: products.category
+    aggregate: net_revenue, item_count, return_rate
+    limit: 10
+  }
+
+  # The ten brands with the most net revenue, with margin.
+  view: top_brands is {
+    group_by: products.brand
+    aggregate: net_revenue, gross_margin
+    limit: 10
+  }
+
+  # Orders and revenue by the customer's first traffic source.
+  view: by_traffic_source is {
+    group_by: users.traffic_source
+    aggregate: order_count, net_revenue, average_order_value
+  }
+
+  # Top categories, each with its monthly trend nested inside.
+  view: category_dashboard is {
+    group_by: products.category
+    aggregate: net_revenue
+    nest: by_month
+    limit: 6
+  }
+
+  // ---- Window patterns: calculate: runs after aggregation, over the ordered rows ----
+
+  # Period over period: net revenue against the month before (lag), and the growth rate.
+  view: revenue_month_over_month is {
+    group_by: order_month is created_at.month
+    aggregate: net_revenue
+    calculate:
+      prior_month_net_revenue is lag(net_revenue)
+      month_over_month_growth is (net_revenue - lag(net_revenue)) / nullif(lag(net_revenue), 0)
+    order_by: order_month
+  }
+
+  # Running total and trailing three-month average of net revenue.
+  view: cumulative_revenue is {
+    group_by: order_month is created_at.month
+    aggregate: net_revenue
+    calculate:
+      cumulative_net_revenue is sum_cumulative(net_revenue)
+      trailing_3_month_average is avg_moving(net_revenue, 2)
+    order_by: order_month
+  }
+}
+
+# One row per order (checkout). Joins its items with join_many, so measures on
+# orders stay correct when a query splits them by item or product.
+source: orders is bigquery.table('bigquery-public-data.thelook_ecommerce.orders') extend {
+  primary_key: order_id
+  join_one: users with user_id
+  join_many: order_items on order_items.order_id = order_id
+
+  dimension:
+    # True when the order was returned.
+    is_returned is returned_at is not null
+
+  measure:
+    # Business.Order: number of orders.
+    orders_placed is count()
+    # Items per order as recorded on the order. Split by order_items.products.category, each order would repeat once per item; symmetric aggregates sum each order once.
+    units_ordered is num_of_item.sum()
+    # Average items per order.
+    average_units_per_order is num_of_item.avg()
+    # Share of orders that were returned.
+    order_return_rate is count() { where: is_returned } / nullif(count(), 0)
+
+  # Orders and units by product category: an order-grain measure split by an item-grain dimension.
+  view: orders_by_category is {
+    group_by: order_items.products.category
+    aggregate: orders_placed, units_ordered, order_items.net_revenue
+    limit: 10
+  }
+}
+
+# Web events on the storefront: one row per event, grouped into sessions.
+source: events is bigquery.table('bigquery-public-data.thelook_ecommerce.events') extend {
+  primary_key: id
+
+  measure:
+    # Number of events.
+    event_count is count()
+    # Business.Session: distinct sessions.
+    session_count is count(session_id)
+    # Sessions with a purchase event.
+    purchase_sessions is count(session_id) { where: event_type = 'purchase' }
+    # Conversion: sessions that purchased over all sessions.
+    conversion_rate is purchase_sessions / nullif(session_count, 0)
+
+  # Sessions and conversion by traffic source.
+  view: funnel is {
+    group_by: traffic_source
+    aggregate: session_count, purchase_sessions, conversion_rate
+  }
+}

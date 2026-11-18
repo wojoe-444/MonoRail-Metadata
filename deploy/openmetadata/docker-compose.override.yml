@@ -1,0 +1,25 @@
+# Local tweaks on top of OpenMetadata's unmodified docker-compose.yml (Compose loads this automatically).
+# - Every port binds to 127.0.0.1 only, so nothing is exposed to the network.
+# - MySQL keeps its data in a Docker volume instead of ./docker-volume/db-data. A bind mount on a Windows
+#   drive (e.g. running Docker from WSL against /mnt/c) can't hold MySQL's file permissions, and it fails to start.
+# - Airflow (the ingestion container) moves to host port 8090; 8080 is often taken on dev machines.
+#   Inside the compose network OpenMetadata still reaches it at http://ingestion:8080.
+services:
+  mysql:
+    ports: !override
+      - "127.0.0.1:3306:3306"
+    volumes: !override
+      - db-data:/var/lib/mysql
+  elasticsearch:
+    ports: !override
+      - "127.0.0.1:9200:9200"
+  openmetadata-server:
+    ports: !override
+      - "127.0.0.1:8585:8585"
+      - "127.0.0.1:8586:8586"
+  ingestion:
+    ports: !override
+      - "127.0.0.1:8090:8080"
+
+volumes:
+  db-data:

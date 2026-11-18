@@ -1,0 +1,36 @@
+# Query usage from BigQuery job history (INFORMATION_SCHEMA.JOBS): which tables
+# are queried, how often, by whom. Fills the Queries tab and usage counts.
+#   metadata usage -c deploy/openmetadata/ingestion/bigquery-usage.yaml
+source:
+  type: bigquery-usage
+  serviceName: bigquery
+  serviceConnection:
+    config:
+      type: BigQuery
+      credentials:
+        gcpConfig:
+          type: gcp_adc
+          projectId: acme-analytics
+      usageLocation: us
+  sourceConfig:
+    config:
+      type: DatabaseUsage
+      queryLogDuration: 7
+      resultLimit: 10000
+processor:
+  type: query-parser
+  config: {}
+stage:
+  type: table-usage
+  config:
+    filename: /tmp/bigquery_usage
+bulkSink:
+  type: metadata-usage
+  config:
+    filename: /tmp/bigquery_usage
+workflowConfig:
+  openMetadataServerConfig:
+    hostPort: http://localhost:8585/api
+    authProvider: openmetadata
+    securityConfig:
+      jwtToken: ${OM_INGESTION_JWT}

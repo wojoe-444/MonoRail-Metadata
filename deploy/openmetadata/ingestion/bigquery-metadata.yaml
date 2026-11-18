@@ -1,0 +1,45 @@
+# Metadata ingestion for BigQuery, for running from the CLI:
+#   pip install "openmetadata-ingestion[bigquery]==2.0.8"
+#   metadata ingest -c deploy/openmetadata/ingestion/bigquery-metadata.yaml
+# Usually you create this pipeline from the app instead (Services > Add ingestion);
+# OpenMetadata then schedules it on its Airflow container.
+source:
+  type: bigquery
+  serviceName: bigquery
+  serviceConnection:
+    config:
+      type: BigQuery
+      # Projects to catalog. Each becomes an OpenMetadata "database".
+      credentials:
+        gcpConfig:
+          # Application Default Credentials. For a service account, use type: service_account
+          # with projectId, privateKeyId, privateKey, clientEmail, clientId (from the key JSON).
+          type: gcp_adc
+          projectId:
+            - acme-analytics
+            - bigquery-public-data
+      # Region whose INFORMATION_SCHEMA.JOBS is read for usage and lineage.
+      usageLocation: us
+  sourceConfig:
+    config:
+      type: DatabaseMetadata
+      includeViews: true
+      includeTags: true            # BigQuery policy tags become OpenMetadata tags
+      includeTables: true
+      markDeletedTables: true
+      schemaFilterPattern:
+        includes:
+          - thelook_ecommerce
+          - staging
+          - marts
+          - reporting
+sink:
+  type: metadata-rest
+  config: {}
+workflowConfig:
+  loggerLevel: INFO
+  openMetadataServerConfig:
+    hostPort: http://localhost:8585/api
+    authProvider: openmetadata
+    securityConfig:
+      jwtToken: ${OM_INGESTION_JWT}
