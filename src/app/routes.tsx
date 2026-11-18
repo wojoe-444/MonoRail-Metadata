@@ -7,6 +7,7 @@ import {
   Gauge,
   GitFork,
   House,
+  Library,
   Network,
   Server,
   Settings,
@@ -56,6 +57,7 @@ function lazyPage(load: () => Promise<ComponentType>): ComponentType {
 const DataQualityPage = lazyPage(() => import('@/pages/DataQualityPage').then((m) => m.DataQualityPage))
 const InsightsPage = lazyPage(() => import('@/pages/InsightsPage').then((m) => m.InsightsPage))
 const LineagePage = lazyPage(() => import('@/pages/LineagePage').then((m) => m.LineagePage))
+const OpenMetadataPage = lazyPage(() => import('@/pages/OpenMetadataPage').then((m) => m.OpenMetadataPage))
 const MalloyWorkbenchPage = lazyPage(() => import('@/pages/MalloyWorkbenchPage').then((m) => m.MalloyWorkbenchPage))
 const QueryBuilderPage = lazyPage(() => import('@/pages/QueryBuilderPage').then((m) => m.QueryBuilderPage))
 const SemanticSourcePage = lazyPage(() => import('@/pages/SemanticSourcePage').then((m) => m.SemanticSourcePage))
@@ -91,6 +93,7 @@ export const NAV: NavSection[] = [
         page: ExplorePage,
         children: [{ path: '/explore/table', label: 'Table', page: TablePage, hidden: true }],
       },
+      { path: '/openmetadata', label: 'OpenMetadata', icon: Library, page: OpenMetadataPage },
       { path: '/lineage', label: 'Lineage', icon: GitFork, page: LineagePage, layout: 'full' },
     ],
   },

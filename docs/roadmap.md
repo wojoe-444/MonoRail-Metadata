@@ -22,14 +22,14 @@ How OpenMetadata's features map to this app, and what comes next. "Backend" mean
 | Services, ingestion pipelines, run history | Built | Pipelines deploy to OpenMetadata's Airflow. |
 | Teams and users | Built (read, create team) | Roles and policies admin is next. |
 | Followers | Built | |
-| Custom properties | Not yet | `extension` is loaded; needs a typed editor. |
+| Custom properties | Read only | Shown on the OpenMetadata page (`extension`); needs a typed editor. |
 | Data contracts | Not yet | OpenMetadata 2.x has them (`contractAPI.ts`). |
 | Announcements | Shown in activity | Creating them is next. |
 | Alerts and notifications | Not yet | Backend has event subscriptions (Slack, email, webhooks). |
 | Auto-classification (PII detection) | Pipeline type only | Review queue for suggested tags is next. |
 | dbt ingestion | Pipeline type only | Shows dbt model SQL and tests as lineage and quality once run. |
 | SSO and per-user identity | Partly (team backend) | The team backend signs people in with Google, attributes every change to their OpenMetadata user, and can act as them through OpenMetadata's bot impersonation (`TEAM_IMPERSONATE`). Direct mode still acts as one bot. See "Identity" below. |
-| Dashboards, pipelines, topics, ML models | Not in scope yet | BigQuery-first. Looker or Airflow services are the likely next ones. |
+| Dashboards, pipelines, topics, ML models and every other type | Generic page | The OpenMetadata page lists and shows every 2.0.8 entity type, with editing of owners, tier, certification, tags and description. Dedicated pages: BigQuery-first; Looker or Airflow services are the likely next ones. |
 
 ## Ours: Malloy and beyond
 

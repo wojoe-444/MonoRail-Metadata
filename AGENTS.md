@@ -28,6 +28,7 @@ browser ──▶ server/ (Hono, :8787) ──/api/om/*────▶ OpenMetad
 | `src/features/om/components/` | `EntityHeader` (top of every entity page, with owner, tier and tag editing), `Labels` (TagChip, TagList, TierBadge, OwnerList, DomainList), `Editors` (DescriptionDialog, TagPickerDialog, OwnerPickerDialog, SingleTagDialog), `Markdown`, `EntityIcon`, `States` (LoadingState, ErrorState, EmptyState, Loaded). |
 | `src/hooks/useQuery.ts` | `useQuery(key, fn)` with a shared cache; `invalidate(...prefix)` after writes. Search query keys start with `'search'`. |
 | `src/features/<feature>/` | Feature code: its API calls (`api.ts`, built on `om()`), components, hooks. |
+| `src/features/openmetadata/` | The OpenMetadata page (`/openmetadata`): every entity type grouped (`catalog.ts`), generic list/read with field fallbacks (`api.ts`), the type navigator, overview, list and entity views. `entityPath()` sends types without a page of their own here, so add new OpenMetadata types to `COLLECTION` and a group in `catalog.ts`. |
 | `src/features/semantic/` | The semantic layer over Malloy: catalog types (`api.ts`, mirroring `server/malloy/semantic.ts`), join tree and fan-out (`model.ts`), query-builder state ↔ URL ↔ Malloy (`query.ts`). |
 
 - To edit an entity: load it with `useEntity`, build the changed object, call `save(next)`. Don't hand-write patch paths when `diffPatch` can compute them.

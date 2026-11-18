@@ -1,4 +1,5 @@
 import { store } from '../store'
+import { OTHER_COLLECTIONS, seedAccess } from './access'
 import { seedCatalog } from './catalog'
 import { seedGovernance } from './governance'
 import { seedIngestion } from './ingestion'
@@ -24,7 +25,9 @@ export function seedAll() {
   store.define('dataQuality/testSuites', 'testSuite')
   store.define('dataQuality/testCases', 'testCase')
   store.define('services/ingestionPipelines', 'ingestionPipeline')
+  for (const [path, type, searchable] of OTHER_COLLECTIONS) store.define(path, type, searchable)
 
+  seedAccess()
   seedGovernance()
   seedCatalog()
   seedQuality()

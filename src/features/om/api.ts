@@ -25,28 +25,68 @@ export const om = <T>(path: string, init?: RequestInit & { json?: unknown }) => 
 /** OpenMetadata encodes FQNs as one path segment. */
 export const enc = (fqn: string) => encodeURIComponent(fqn)
 
-/** REST collection for an entity type. */
+/**
+ * REST collection for every OpenMetadata 2.0.8 entity type (paths from OpenMetadata's own UI client,
+ * openmetadata-ui/src/rest/*.ts). The OpenMetadata page (src/pages/OpenMetadataPage.tsx) browses all of them.
+ */
 export const COLLECTION: Record<string, string> = {
+  // Data assets
   table: 'tables',
   database: 'databases',
   databaseSchema: 'databaseSchemas',
+  storedProcedure: 'storedProcedures',
+  query: 'queries',
+  metric: 'metrics',
+  dashboard: 'dashboards',
+  chart: 'charts',
+  dashboardDataModel: 'dashboard/datamodels',
+  pipeline: 'pipelines',
+  topic: 'topics',
+  mlmodel: 'mlmodels',
+  container: 'containers',
+  searchIndex: 'searchIndexes',
+  apiCollection: 'apiCollections',
+  apiEndpoint: 'apiEndpoints',
+  directory: 'drives/directories',
+  file: 'drives/files',
+  spreadsheet: 'drives/spreadsheets',
+  worksheet: 'drives/worksheets',
+  // Services
   databaseService: 'services/databaseServices',
+  dashboardService: 'services/dashboardServices',
+  messagingService: 'services/messagingServices',
+  pipelineService: 'services/pipelineServices',
+  mlmodelService: 'services/mlmodelServices',
+  storageService: 'services/storageServices',
+  searchService: 'services/searchServices',
+  apiService: 'services/apiServices',
+  metadataService: 'services/metadataServices',
+  securityService: 'services/securityServices',
+  driveService: 'services/driveServices',
+  ingestionPipeline: 'services/ingestionPipelines',
+  // Governance
   glossary: 'glossaries',
   glossaryTerm: 'glossaryTerms',
   classification: 'classifications',
   tag: 'tags',
   domain: 'domains',
   dataProduct: 'dataProducts',
+  dataContract: 'dataContracts',
+  // Data quality
+  testDefinition: 'dataQuality/testDefinitions',
+  testSuite: 'dataQuality/testSuites',
+  testCase: 'dataQuality/testCases',
+  // Teams and access
   user: 'users',
   team: 'teams',
-  query: 'queries',
-  metric: 'metrics',
-  testCase: 'dataQuality/testCases',
-  testSuite: 'dataQuality/testSuites',
-  ingestionPipeline: 'services/ingestionPipelines',
-  dashboard: 'dashboards',
-  pipeline: 'pipelines',
-  topic: 'topics',
+  role: 'roles',
+  policy: 'policies',
+  persona: 'personas',
+  // Platform
+  eventsubscription: 'events/subscriptions',
+  app: 'apps',
+  kpi: 'kpi',
+  type: 'metadata/types',
 }
 
 export function collectionOf(entityType: string): string {
