@@ -14,7 +14,14 @@ export const FACETS: { param: string; field: string; label: string; format?: (v:
   { param: 'dataset', field: 'databaseSchema.displayName.keyword', label: 'Dataset' },
   { param: 'owner', field: 'owners.displayName.keyword', label: 'Owner' },
   { param: 'domain', field: 'domains.displayName.keyword', label: 'Domain' },
-  { param: 'tier', field: 'tier.tagFQN', label: 'Tier', format: (v) => v.replace('Tier.Tier', 'Tier ') },
+  { param: 'tier', field: 'tier.tagFQN', label: 'Tier', format: (v) => v.replace(/^tier\.tier/i, 'Tier ') },
+  // 2.x's own field. Data that still has Certification.* tags shows them under "Tag or term".
+  {
+    param: 'certification',
+    field: 'certification.tagLabel.tagFQN',
+    label: 'Certification',
+    format: (v) => v.replace(/^certification\./i, '').replace(/^./, (c) => c.toUpperCase()),
+  },
   { param: 'tag', field: 'tags.tagFQN', label: 'Tag or term' },
   { param: 'service', field: 'service.displayName.keyword', label: 'Service' },
 ]

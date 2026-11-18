@@ -5,8 +5,8 @@ import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
-import { displayName, entityHref, refHref } from '../entity'
-import type { EntityReference, TagLabel } from '../types'
+import { displayName, entityHref, formatDate, isExpired, refHref } from '../entity'
+import type { AssetCertification, EntityReference, TagLabel } from '../types'
 
 /** Small read-only labels shared by every entity view: tags, tier, certification, owners, domains. */
 
@@ -79,13 +79,26 @@ export function TierBadge({ tier }: { tier: TagLabel | undefined }) {
 
 const CERT_VARIANT: Record<string, 'success' | 'secondary' | 'outline'> = { Gold: 'success', Silver: 'secondary', Bronze: 'outline' }
 
-export function CertificationBadge({ tag }: { tag: TagLabel | undefined }) {
-  if (!tag) return null
+/** A certification level, from the `certification` field (or a legacy `Certification.*` tag). Expired ones say so. */
+export function CertificationBadge({ certification }: { certification: AssetCertification | undefined }) {
+  if (!certification) return null
+  const tag = certification.tagLabel
   const name = tag.tagFQN.split('.').pop() ?? tag.tagFQN
+  const expired = isExpired(certification)
+  const dates = [
+    certification.appliedDate ? `Certified ${formatDate(certification.appliedDate)}` : '',
+    certification.expiryDate ? `${expired ? 'expired' : 'expires'} ${formatDate(certification.expiryDate)}` : '',
+  ]
+    .filter(Boolean)
+    .join(', ')
   return (
-    <Badge variant={CERT_VARIANT[name] ?? 'outline'} title={tag.description}>
+    <Badge
+      variant={expired ? 'outline' : (CERT_VARIANT[name] ?? 'outline')}
+      title={[tag.description, dates].filter(Boolean).join('\n') || undefined}
+    >
       <Award aria-hidden />
       {name}
+      {expired && <span className="text-muted-foreground">(expired)</span>}
     </Badge>
   )
 }

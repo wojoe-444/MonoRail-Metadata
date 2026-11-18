@@ -3,7 +3,7 @@ import jsonpatch from 'fast-json-patch'
 import { href } from '@/lib/router'
 
 import type { PatchOp } from './api'
-import type { EntityBase, EntityReference, TagLabel } from './types'
+import type { AssetCertification, EntityBase, EntityReference, TagLabel } from './types'
 
 /** The name to show for an entity or reference. */
 export function displayName(e: { displayName?: string; name?: string; fullyQualifiedName?: string } | undefined): string {
@@ -94,8 +94,36 @@ export function plainTags(tags: TagLabel[] | undefined): TagLabel[] {
   return (tags ?? []).filter((t) => !isTier(t) && !isCertification(t))
 }
 
-export function certificationOf(tags: TagLabel[] | undefined): TagLabel | undefined {
-  return tags?.find(isCertification)
+/**
+ * An entity's certification. OpenMetadata 2.x keeps it in its own `certification` field; older
+ * data (and servers before 1.6) stored it as a `Certification.*` tag, which is the fallback.
+ */
+export function certificationOf(entity: Pick<EntityBase, 'certification' | 'tags'> | undefined): AssetCertification | undefined {
+  if (entity?.certification?.tagLabel) return entity.certification
+  const tag = entity?.tags?.find(isCertification)
+  return tag ? { tagLabel: tag } : undefined
+}
+
+/** Whether a certification has run out (2.x sets `expiryDate` from the certification settings). */
+export const isExpired = (c: AssetCertification | undefined, now = Date.now()) => Boolean(c?.expiryDate && c.expiryDate < now)
+
+const CERTIFICATION_DAYS = 90
+
+/**
+ * The entity with `tag` as its certification (or none), written to the real field, the way
+ * OpenMetadata's own UI does it. A legacy `Certification.*` tag is dropped at the same time, so the
+ * PATCH that `diffPatch` builds moves old data onto the field. The dates are placeholders: the
+ * server sets them.
+ */
+export function withCertification<T extends EntityBase>(entity: T, tag: TagLabel | undefined): T {
+  const tags = entity.tags?.some(isCertification) ? entity.tags.filter((t) => !isCertification(t)) : entity.tags
+  const next: T = { ...entity, tags }
+  if (!tag) {
+    delete next.certification
+    return next
+  }
+  const now = Date.now()
+  return { ...next, certification: { tagLabel: tag, appliedDate: now, expiryDate: now + CERTIFICATION_DAYS * 86_400_000 } }
 }
 
 /** JSON Patch ops that turn `before` into `after`, the way OpenMetadata's own UI builds edits. */

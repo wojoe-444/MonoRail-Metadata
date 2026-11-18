@@ -66,7 +66,7 @@ export function ServiceBrowsePage() {
         badges={'serviceType' in entity && entity.serviceType ? <Badge variant="primary">{entity.serviceType}</Badge> : undefined}
         onSave={save}
         onFollowChange={query.refetch}
-        fields={type === 'databaseService' ? ['owners', 'domains', 'tags'] : ['owners', 'tier', 'domains', 'tags']}
+        fields={type === 'databaseService' ? ['owners', 'domains', 'tags'] : ['owners', 'tier', 'certification', 'domains', 'tags']}
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">

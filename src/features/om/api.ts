@@ -183,7 +183,7 @@ export function filterQuery(filters: Record<string, string[]>, extra: object[] =
 // ---------- Tables ----------
 
 export const TABLE_FIELDS =
-  'columns,owners,tags,followers,domains,dataProducts,usageSummary,tableConstraints,schemaDefinition,extension,votes,lifeCycle'
+  'columns,owners,tags,certification,followers,domains,dataProducts,usageSummary,tableConstraints,schemaDefinition,extension,votes,lifeCycle'
 
 export function getTable(fqn: string): Promise<Table> {
   return getEntity<Table>('table', fqn, TABLE_FIELDS)

@@ -6,7 +6,7 @@ import { Hono, type Context } from 'hono'
 import { registerExtraRoutes } from './routes'
 import { aggregate, search } from './search'
 import { seedAll } from './seed'
-import { ref, store, type Entity } from './store'
+import { certified, ref, store, type Entity } from './store'
 
 /**
  * A stand-in for the OpenMetadata REST API (`/api/v1`), used when OM_URL is
@@ -292,6 +292,9 @@ demoApp.all('/*', async (c) => {
   if (method === 'PATCH') {
     const ops = (await c.req.json()) as Operation[]
     const next = jsonpatch.applyPatch(structuredClone(entity), ops, false, false).newDocument as Entity
+    // Like 2.0.8's updateCertification: the server sets the dates, whatever the client sent.
+    if (next.certification?.tagLabel && next.certification.tagLabel.tagFQN !== entity.certification?.tagLabel?.tagFQN)
+      next.certification = certified(next.certification.tagLabel)
     return c.json(update(entity, expandRefs(next)))
   }
   if (method === 'DELETE') {

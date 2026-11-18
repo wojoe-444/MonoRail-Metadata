@@ -28,6 +28,17 @@ export interface TagLabel {
   style?: { color?: string; iconURL?: string }
 }
 
+/**
+ * OpenMetadata 2.x's `certification` field (type/assetCertification.json). The server sets both
+ * dates on PATCH: `appliedDate` to now and `expiryDate` from the certification settings' validity
+ * period, whatever the client sends.
+ */
+export interface AssetCertification {
+  tagLabel: TagLabel
+  appliedDate?: number
+  expiryDate?: number
+}
+
 export interface ChangeDescription {
   previousVersion?: number
   fieldsAdded?: FieldChange[]
@@ -55,6 +66,8 @@ export interface EntityBase {
   deleted?: boolean
   owners?: EntityReference[]
   tags?: TagLabel[]
+  /** Tables, databases, datasets, metrics, data products, domains and stored procedures in 2.0.8. */
+  certification?: AssetCertification | null
   followers?: EntityReference[]
   domains?: EntityReference[]
   dataProducts?: EntityReference[]

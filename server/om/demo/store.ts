@@ -197,6 +197,14 @@ export function ref(e: Entity, type?: string): EntityRef {
 }
 
 /** An OpenMetadata TagLabel for a classification tag or glossary term FQN. */
+/** OpenMetadata's default certification validity period (P30D). */
+const CERTIFICATION_VALIDITY_MS = 30 * 86_400_000
+
+/** An `AssetCertification` (2.x's `certification` field), applied `at` (default now). */
+export function certified(tagLabel: { tagFQN: string }, at = Date.now()) {
+  return { tagLabel, appliedDate: at, expiryDate: at + CERTIFICATION_VALIDITY_MS }
+}
+
 export function tagLabel(fqn: string, source: 'Classification' | 'Glossary' = 'Classification') {
   const entity = store.findFqn(fqn, source === 'Glossary' ? 'glossaryTerm' : 'tag')?.entity
   return {

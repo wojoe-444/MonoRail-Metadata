@@ -244,6 +244,21 @@ async function main() {
     )
     if (!real) continue
     idMap.set(t.id, real.id)
+    // 2.x keeps certification in its own field and drops Certification.* tags sent in `tags`.
+    // It's set with a PATCH (the server fills in appliedDate and expiryDate), like OpenMetadata's UI does it.
+    const cert = t.certification?.tagLabel?.tagFQN as string | undefined
+    if (cert && real.certification?.tagLabel?.tagFQN !== cert) {
+      const now = Date.now()
+      const tagLabel = { tagFQN: cert, source: 'Classification', labelType: 'Manual', state: 'Confirmed' }
+      await step('certification', t.name, () =>
+        call(
+          'PATCH',
+          `/tables/${real.id}`,
+          [{ op: 'add', path: '/certification', value: { tagLabel, appliedDate: now, expiryDate: now } }],
+          'application/json-patch+json',
+        ),
+      )
+    }
     for (const f of t.followers ?? []) {
       const uid = idMap.get(f.id)
       if (uid) await step('follower', t.name, () => call('PUT', `/tables/${real.id}/followers`, JSON.stringify(uid)))
