@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import sys
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -10,6 +12,22 @@ from dotenv import dotenv_values
 
 # worker/src/monorail_worker/config.py -> repo root
 REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def app_data_dir(env: Mapping[str, str] | None = None, platform: str | None = None, home: Path | None = None) -> Path:
+    """The per-user folder the app keeps local data in. Same rule as `appDataDir()` in server/config.ts.
+
+    Windows: %LOCALAPPDATA%/MonoRail-Metadata. macOS: ~/Library/Application Support/MonoRail-Metadata.
+    Linux: $XDG_DATA_HOME/monorail-metadata (default ~/.local/share/monorail-metadata).
+    """
+    env = os.environ if env is None else env
+    platform = platform or sys.platform
+    home = home or Path.home()
+    if platform == "win32":
+        return Path(env.get("LOCALAPPDATA") or home / "AppData" / "Local") / "MonoRail-Metadata"
+    if platform == "darwin":
+        return home / "Library" / "Application Support" / "MonoRail-Metadata"
+    return Path(env.get("XDG_DATA_HOME") or home / ".local" / "share") / "monorail-metadata"
 
 
 def _bool(v: str) -> bool:
@@ -65,7 +83,9 @@ class Settings:
             v = env.get(name)
             return default if v is None or v == "" else v
 
-        bucket = get("TEAM_BUCKET", str(REPO_ROOT / ".team-bucket"))
+        bucket = get("TEAM_BUCKET", str(app_data_dir(env) / "team-bucket"))
+        if bucket.startswith("file://"):
+            bucket = bucket[len("file://") :]
         if not bucket.startswith("gs://") and not Path(bucket).is_absolute():
             bucket = str((REPO_ROOT / bucket).resolve())
         auth = get("TEAM_AUTH", "local").lower()

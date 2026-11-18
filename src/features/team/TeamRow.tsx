@@ -52,6 +52,12 @@ export function TeamRow({ team }: { team: TeamStatus }) {
           </div>
         ))}
       </dl>
+      {!team.bucket.startsWith('gs://') && (
+        <p className="rounded-lg bg-info-soft px-3 py-2 text-xs text-info-soft-foreground">
+          Pilot setup: the bucket is a folder on this computer, and the worker (a Vertex AI job in a Google Cloud setup) runs here too.
+          Easier ways for a team to share the app without a central server are on the way.
+        </p>
+      )}
       {team.replica.error && (
         <p className="rounded-lg bg-warning-soft px-3 py-2 text-xs text-warning-soft-foreground">{team.replica.error}</p>
       )}

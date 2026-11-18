@@ -25,6 +25,10 @@ How MonoRail Metadata runs for a team that has **Google sign-in, a GCS bucket, a
 
 `APP_BACKEND` picks the mode in the app: `demo` (in-process fixtures), `direct` (the app calls OpenMetadata at `OM_URL`, as before), or `team` (this document). Locally, the bucket is a folder; `TEAM_BUCKET=gs://bucket/prefix` switches to GCS without changing anything else.
 
+**Pilot.** While test users pilot the app, the worker isn't a Vertex AI job: each tester runs it on their own machine, next to a local OpenMetadata, and the bucket is a folder in their app data (`npm run pilot` starts the app and the worker together). Easier ways for a team to share the app without a central server are coming; until then a pilot installation is one person's.
+
+**Default bucket folder.** With `TEAM_BUCKET` empty, the app and the worker both use `team-bucket` in the per-user app data folder: `%LOCALAPPDATA%\MonoRail-Metadata` on Windows, `~/Library/Application Support/MonoRail-Metadata` on macOS, `$XDG_DATA_HOME/monorail-metadata` (default `~/.local/share/monorail-metadata`) elsewhere. A relative `TEAM_BUCKET` is resolved from the repo root on both sides. The rule is `appDataDir()` in `server/config.ts` and `app_data_dir()` in the worker's `config.py`; change both together.
+
 ## Bucket layout
 
 All paths are relative to the bucket root (`TEAM_BUCKET`, a `gs://bucket/prefix` URL or a local folder path).

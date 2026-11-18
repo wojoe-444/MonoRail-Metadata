@@ -64,7 +64,9 @@ The team backend ([team-backend.md](team-backend.md)) signs each person in with 
 
 ## Deployment
 
-Today: OpenMetadata via its Docker Compose, the app as one Node process (`npm run build && npm start`). For a team: OpenMetadata on GKE (its Helm chart) with Cloud SQL (MySQL or Postgres) and a managed search cluster; the app on Cloud Run behind IAP, using Workload Identity for BigQuery.
+Today: OpenMetadata via its Docker Compose, the app as one Node process (`npm run build && npm start`).
+
+Pilot: test users run the team backend on their own machines (`npm run pilot`), with the bucket in a folder in their app data and the worker, which would be a Vertex AI job on Google Cloud, running locally. Next: easier ways for a team to share the app without a central server. For a team: OpenMetadata on GKE (its Helm chart) with Cloud SQL (MySQL or Postgres) and a managed search cluster; the app on Cloud Run behind IAP, using Workload Identity for BigQuery.
 
 ## Check against a real OpenMetadata
 
